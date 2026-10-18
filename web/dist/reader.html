@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="rice-paper">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>阅境 · 沉浸研读</title>
+  <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/reader.css" />
+</head>
+<body class="reader-page">
+  <div class="texture-layer" aria-hidden="true"></div>
+
+  <div class="reader-shell">
+    <!-- 顶部折叠导航栏 -->
+    <header id="reader-topbar" class="reader-topbar">
+      <div class="reader-book-info">
+        <a class="btn" href="/" style="padding:5px 11px;">← 归架</a>
+        <span id="topbar-book-title" class="reader-book-title">正在展卷…</span>
+        <span id="topbar-chapter-title" class="reader-chapter-title"></span>
+      </div>
+
+      <div class="reader-toolbar-actions">
+        <button id="btn-open-toc" class="btn" type="button">目录 / 朱批 (<span id="ann-count-badge">0</span>)</button>
+        <button id="btn-open-settings" class="btn btn-primary" type="button">版式 / 墨水屏设置</button>
+      </div>
+    </header>
+
+    <!-- 核心 Foliate 阅读器视图 -->
+    <main class="reader-viewport">
+      <foliate-view id="reader-view"></foliate-view>
+      <footer class="reader-micro-status">
+        <span id="status-chapter">正在载入章节…</span>
+        <span id="status-page">1 / 1 · 0.0%</span>
+      </footer>
+    </main>
+
+    <!-- 底部折叠进度控制栏 -->
+    <footer id="reader-bottombar" class="reader-bottombar">
+      <button id="btn-prev-chapter" class="btn" type="button">上一章</button>
+      <div class="progress-slider-wrap">
+        <input id="progress-slider" class="progress-range" type="range" min="0" max="100" step="0.5" value="0" />
+        <span id="progress-percent-label" style="min-width:44px;text-align:right;">0.0%</span>
+      </div>
+      <button id="btn-next-chapter" class="btn" type="button">下一章</button>
+    </footer>
+  </div>
+
+  <!-- 抽屉遮罩层 -->
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+
+  <!-- 左侧抽屉：目录 / 朱批列表 / Obsidian 笔记实时预览 -->
+  <aside id="drawer-left" class="drawer-panel left">
+    <div class="drawer-header">
+      <div class="drawer-tabs">
+        <button class="drawer-tab active" data-tab="toc" type="button">卷章目录</button>
+        <button class="drawer-tab" data-tab="anns" type="button">朱批摘录</button>
+        <button class="drawer-tab" data-tab="obsidian" type="button">Obsidian 预览</button>
+      </div>
+      <button id="btn-close-left-drawer" class="btn" style="padding:4px 9px;" type="button">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div id="tab-panel-toc">
+        <ul id="toc-list" class="toc-list"></ul>
+      </div>
+      <div id="tab-panel-anns" style="display:none;">
+        <div id="annotations-list"></div>
+      </div>
+      <div id="tab-panel-obsidian" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-size:12px;color:var(--stone);">已自动同步至 <code>notes/《书名》.md</code></span>
+          <button id="btn-copy-obsidian" class="btn" style="padding:4px 10px;font-size:12px;" type="button">复制全文</button>
+        </div>
+        <pre id="obsidian-md-preview" style="font-size:12px;line-height:1.55;white-space:pre-wrap;background:var(--paper-card);padding:12px;border:1px solid var(--crack);border-radius:4px;overflow-x:auto;"></pre>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 右侧抽屉：四套主题、三模翻页、排版五要素与墨水屏物理按键录制 -->
+  <aside id="drawer-right" class="drawer-panel right">
+    <div class="drawer-header">
+      <strong style="font-size:15px;">版式修润与墨水屏调优</strong>
+      <button id="btn-close-right-drawer" class="btn" style="padding:4px 9px;" type="button">✕</button>
+    </div>
+    <div class="drawer-body">
+      <!-- 四套主题 -->
+      <div class="setting-group">
+        <div class="setting-label"><span>纸墨主题</span></div>
+        <div class="segmented-group">
+          <button class="seg-btn" data-set-theme="rice-paper" type="button">宣纸墨香</button>
+          <button class="seg-btn" data-set-theme="e-ink" type="button">墨水屏黑白</button>
+          <button class="seg-btn" data-set-theme="modern-white" type="button">现代素白</button>
+          <button class="seg-btn" data-set-theme="dark-ink" type="button">水墨暗夜</button>
+        </div>
+      </div>
+
+      <!-- 三模翻页引擎 -->
+      <div class="setting-group">
+        <div class="setting-label">
+          <span>翻页引擎</span>
+          <button id="btn-show-tz-guide" class="btn" style="padding:2px 8px;font-size:11.5px;" type="button">查看九宫格热区</button>
+        </div>
+        <div class="segmented-group">
+          <button class="seg-btn" data-set-flip="instant_tap" type="button">0ms 点按瞬切</button>
+          <button class="seg-btn" data-set-flip="horiz_slide" type="button">水平平滑滑动</button>
+          <button class="seg-btn" data-set-flip="continuous" type="button">垂直连续滚动</button>
+        </div>
+      </div>
+
+      <!-- 要素 1：字号微调 -->
+      <div class="setting-group">
+        <div class="setting-label">
+          <span>字号大小</span>
+          <span id="font-size-label">19px</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button id="btn-font-dec" class="btn" style="padding:5px 12px;" type="button">A-</button>
+          <input id="font-size-range" class="progress-range" type="range" min="12" max="36" step="1" value="19" />
+          <button id="btn-font-inc" class="btn" style="padding:5px 12px;" type="button">A+</button>
+        </div>
+      </div>
+
+      <!-- 要素 2：字体家族 -->
+      <div class="setting-group">
+        <div class="setting-label"><span>字体家族</span></div>
+        <div class="segmented-group">
+          <button class="seg-btn" data-set-font="serif" type="button">宋体衬线</button>
+          <button class="seg-btn" data-set-font="kaiti" type="button">人文楷体</button>
+          <button class="seg-btn" data-set-font="sans" type="button">现代黑体</button>
+          <button class="seg-btn" data-set-font="system" type="button">系统默认</button>
+        </div>
+      </div>
+
+      <!-- 要素 3：行间距 -->
+      <div class="setting-group">
+        <div class="setting-label"><span>行距疏密</span></div>
+        <div class="segmented-group">
+          <button class="seg-btn" data-set-lh="1.4" type="button">1.4 紧凑</button>
+          <button class="seg-btn" data-set-lh="1.8" type="button">1.8 宣纸标准</button>
+          <button class="seg-btn" data-set-lh="2.2" type="button">2.2 古籍疏朗</button>
+        </div>
+      </div>
+
+      <!-- 要素 4：版心边距 -->
+      <div class="setting-group">
+        <div class="setting-label"><span>版心边距</span></div>
+        <div class="segmented-group">
+          <button class="seg-btn" data-set-margin="12" type="button">极窄 (12px)</button>
+          <button class="seg-btn" data-set-margin="28" type="button">适中 (28px)</button>
+          <button class="seg-btn" data-set-margin="48" type="button">宽裕 (48px)</button>
+        </div>
+      </div>
+
+      <!-- 要素 5：段落格式 -->
+      <div class="setting-group">
+        <div class="setting-label"><span>段落排版</span></div>
+        <div class="segmented-group">
+          <button id="btn-toggle-indent" class="seg-btn" type="button">段首两字缩进</button>
+          <button id="btn-toggle-justify" class="seg-btn" type="button">左右两端对齐</button>
+        </div>
+      </div>
+
+      <!-- 墨水屏实体物理按键自定义录制 -->
+      <div class="setting-group" style="border-bottom:none;">
+        <div class="setting-label"><span>墨水屏物理翻页键录制绑定</span></div>
+        <p id="custom-keys-status" style="font-size:11.5px;color:var(--stone);margin:0 0 10px;line-height:1.45;"></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="btn-record-next" class="btn" style="flex:1;" type="button">录制「下页键」</button>
+          <button id="btn-record-prev" class="btn" style="flex:1;" type="button">录制「上页键」</button>
+          <button id="btn-reset-keys" class="btn" type="button">重置</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 四色文人印彩划线批注浮层 -->
+  <div id="annotator-popover" class="annotator-popover">
+    <div class="seal-colors">
+      <button class="seal-btn active" data-color="zhusha" type="button"><span class="seal-dot zhusha"></span>朱砂</button>
+      <button class="seal-btn" data-color="zhuqing" type="button"><span class="seal-dot zhuqing"></span>竹青</button>
+      <button class="seal-btn" data-color="songyan" type="button"><span class="seal-dot songyan"></span>松烟</button>
+      <button class="seal-btn" data-color="qiukui" type="button"><span class="seal-dot qiukui"></span>秋葵</button>
+    </div>
+    <textarea id="annotator-note-input" class="annotator-textarea" placeholder="批注研读心得（保存后实时直写 Obsidian 笔记库）…"></textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <button id="btn-delete-annotation" class="btn btn-danger" style="padding:4px 10px;font-size:12px;display:none;" type="button">删除批注</button>
+      <div style="display:flex;gap:8px;margin-left:auto;">
+        <button id="btn-cancel-annotation" class="btn" style="padding:4px 10px;font-size:12px;" type="button">取消</button>
+        <button id="btn-save-annotation" class="btn btn-primary" style="padding:4px 12px;font-size:12px;" type="button">钤印保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 二维九宫格触控热区示意浮层 -->
+  <div id="touch-zone-guide" class="touch-zone-guide">
+    <div class="tz-left">← 左侧 35%<br/>上一页</div>
+    <div class="tz-right">右侧 65% →<br/>下一页（单手盲按区）</div>
+    <div class="tz-center">
+      <strong style="font-size:15px;margin-bottom:6px;">中央九宫格热区</strong>
+      <span style="font-size:12.5px;color:var(--stone);">[X: 30%~70%, Y: 25%~75%]<br/>点按呼出 / 收起顶部与底部菜单<br/>（点击任意处关闭此示意图）</span>
+    </div>
+  </div>
+
+  <script type="module" src="/js/reader-app.js"></script>
+</body>
+</html>

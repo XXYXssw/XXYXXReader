@@ -1,0 +1,572 @@
+// Foliate-core <foliate-view> 统一流式阅读 Web Component
+// 支持：Shadow DOM + iframe 样式穿透、三模翻页(0ms瞬切/水平滑动/连续滚动)、四色印彩高亮图层、二维九宫格热区转发
+import { EPUBBook } from './epub.js';
+import { MOBIBook } from './mobi.js';
+import { CFIEngine } from './cfi.js';
+import { ThemeManager } from '../theme.js';
+
+export class FoliateView extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.book = null;
+    this.currentSectionIndex = 0;
+    this.currentPage = 0;
+    this.totalPagesInSection = 1;
+    this.annotations = [];
+
+    this.settings = {
+      flipMode: 'instant_tap', // instant_tap | horiz_slide | continuous
+      fontSize: 19,
+      fontFamily: 'serif',     // serif | kaiti | sans | system
+      lineHeight: 1.8,
+      margin: 28,              // 12 | 28 | 48
+      indent: true,
+      justify: true
+    };
+
+    this._renderShadowShell();
+  }
+
+  _renderShadowShell() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          width: 100%;
+          height: 100%;
+          position: relative;
+          overflow: hidden;
+        }
+        .stage {
+          width: 100%;
+          height: 100%;
+          position: relative;
+          overflow: hidden;
+        }
+        iframe {
+          width: 100%;
+          height: 100%;
+          border: none;
+          display: block;
+          background: transparent;
+        }
+      </style>
+      <div class="stage">
+        <iframe id="chapter-frame" sandbox="allow-same-origin allow-scripts"></iframe>
+      </div>
+    `;
+    this.iframe = this.shadowRoot.getElementById('chapter-frame');
+  }
+
+  async openBuffer(arrayBuffer, fileType = 'epub') {
+    if (this.book) {
+      this.book.destroy();
+    }
+    if (fileType === 'azw3' || fileType === 'mobi') {
+      this.book = new MOBIBook(arrayBuffer);
+    } else {
+      this.book = new EPUBBook(arrayBuffer);
+    }
+    await this.book.init();
+    return {
+      metadata: this.book.metadata,
+      toc: this.book.toc,
+      sectionCount: this.book.sections.length
+    };
+  }
+
+  async goToSection(index, targetPageRatio = 0) {
+    if (!this.book || !this.book.sections.length) return;
+    const clamped = Math.max(0, Math.min(index, this.book.sections.length - 1));
+    this.currentSectionIndex = clamped;
+    const sec = this.book.sections[clamped];
+    const { headHTML, bodyHTML } = await sec.loadHTML();
+
+    const doc = this.iframe.contentDocument;
+    doc.open();
+    doc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  ${headHTML}
+  <style id="xxyxx-injected-style"></style>
+</head>
+<body>
+  <div id="xxyxx-reader-root">${bodyHTML}</div>
+</body>
+</html>`);
+    doc.close();
+
+    this._applyIframeStyles();
+    this._bindIframeEvents();
+    this.renderAnnotationsInCurrentSection();
+
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    this._recalculatePagination();
+
+    if (this.settings.flipMode === 'continuous') {
+      const maxScroll = Math.max(0, doc.documentElement.scrollHeight - this.iframe.clientHeight);
+      doc.documentElement.scrollTop = Math.round(maxScroll * targetPageRatio);
+    } else {
+      if (targetPageRatio >= 0.99) {
+        this.currentPage = Math.max(0, this.totalPagesInSection - 1);
+      } else {
+        this.currentPage = Math.min(
+          this.totalPagesInSection - 1,
+          Math.max(0, Math.floor(targetPageRatio * this.totalPagesInSection))
+        );
+      }
+      this._applyPageOffset(false);
+    }
+    this._emitRelocate();
+  }
+
+  async goToCFI(cfi, fallbackPercent = 0) {
+    if (!this.book || !this.book.sections.length) return;
+    if (cfi && cfi.startsWith('epubcfi(')) {
+      const secIdx = CFIEngine.parseSectionIndex(cfi);
+      const pageMatch = cfi.match(/\[p:(\d+)\/(\d+)\]/);
+      let ratio = 0;
+      if (pageMatch) {
+        const p = parseInt(pageMatch[1], 10);
+        const total = Math.max(1, parseInt(pageMatch[2], 10));
+        ratio = p / total;
+      }
+      await this.goToSection(secIdx, ratio);
+      return;
+    }
+    if (fallbackPercent > 0) {
+      await this.goToPercent(fallbackPercent);
+    } else {
+      await this.goToSection(0, 0);
+    }
+  }
+
+  async goToPercent(percent) {
+    if (!this.book || !this.book.sections.length) return;
+    const ratio = Math.max(0, Math.min(100, percent)) / 100;
+    const exactSec = ratio * this.book.sections.length;
+    const secIdx = Math.min(this.book.sections.length - 1, Math.floor(exactSec));
+    const remRatio = exactSec - secIdx;
+    await this.goToSection(secIdx, remRatio);
+  }
+
+  async next() {
+    if (!this.book) return;
+    const doc = this.iframe.contentDocument;
+    if (!doc) return;
+
+    if (this.settings.flipMode === 'continuous') {
+      const step = this.iframe.clientHeight * 0.85;
+      const maxScroll = doc.documentElement.scrollHeight - this.iframe.clientHeight;
+      if (doc.documentElement.scrollTop + 12 < maxScroll) {
+        doc.documentElement.scrollTop += step;
+        this._emitRelocate();
+      } else if (this.currentSectionIndex + 1 < this.book.sections.length) {
+        await this.goToSection(this.currentSectionIndex + 1, 0);
+      }
+      return;
+    }
+
+    this._recalculatePagination();
+    if (this.currentPage + 1 < this.totalPagesInSection) {
+      this.currentPage += 1;
+      this._applyPageOffset(true);
+      this._emitRelocate();
+    } else if (this.currentSectionIndex + 1 < this.book.sections.length) {
+      await this.goToSection(this.currentSectionIndex + 1, 0);
+    }
+  }
+
+  async prev() {
+    if (!this.book) return;
+    const doc = this.iframe.contentDocument;
+    if (!doc) return;
+
+    if (this.settings.flipMode === 'continuous') {
+      const step = this.iframe.clientHeight * 0.85;
+      if (doc.documentElement.scrollTop > 10) {
+        doc.documentElement.scrollTop = Math.max(0, doc.documentElement.scrollTop - step);
+        this._emitRelocate();
+      } else if (this.currentSectionIndex > 0) {
+        await this.goToSection(this.currentSectionIndex - 1, 1);
+      }
+      return;
+    }
+
+    this._recalculatePagination();
+    if (this.currentPage > 0) {
+      this.currentPage -= 1;
+      this._applyPageOffset(true);
+      this._emitRelocate();
+    } else if (this.currentSectionIndex > 0) {
+      await this.goToSection(this.currentSectionIndex - 1, 1);
+    }
+  }
+
+  updateSettings(partial) {
+    Object.assign(this.settings, partial);
+    this._applyIframeStyles();
+    this._recalculatePagination();
+    this._applyPageOffset(false);
+    this._emitRelocate();
+  }
+
+  setAnnotations(list) {
+    this.annotations = Array.isArray(list) ? list : [];
+    this.renderAnnotationsInCurrentSection();
+  }
+
+  _applyIframeStyles() {
+    const doc = this.iframe.contentDocument;
+    if (!doc) return;
+    const styleEl = doc.getElementById('xxyxx-injected-style');
+    if (!styleEl) return;
+
+    const palette = ThemeManager.getPalette();
+    const fontMap = {
+      serif: '"Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", Georgia, serif',
+      kaiti: '"Kaiti SC", "STKaiti", "KaiTi", "Noto Serif CJK SC", serif',
+      sans: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif',
+      system: 'system-ui, -apple-system, sans-serif'
+    };
+    const fontStack = fontMap[this.settings.fontFamily] || fontMap.serif;
+    const isContinuous = this.settings.flipMode === 'continuous';
+    const isEinkOrInstant = palette.isEink || this.settings.flipMode === 'instant_tap';
+
+    const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
+    const viewH = Math.max(300, this.iframe.clientHeight || window.innerHeight);
+    const padX = Number(this.settings.margin) || 28;
+    const padY = 24;
+    const colWidth = Math.max(200, viewW - padX * 2);
+    const colGap = padX * 2;
+
+    styleEl.textContent = `
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        color: ${palette.fg} !important;
+        background: transparent !important;
+        font-family: ${fontStack} !important;
+        font-size: ${this.settings.fontSize}px !important;
+        line-height: ${this.settings.lineHeight} !important;
+        -webkit-font-smoothing: antialiased;
+      }
+      ${isContinuous ? `
+      html {
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+      }
+      #xxyxx-reader-root {
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 32px ${padX}px 64px !important;
+      }
+      ` : `
+      html, body {
+        width: 100% !important;
+        height: ${viewH}px !important;
+        overflow: hidden !important;
+      }
+      #xxyxx-reader-root {
+        box-sizing: border-box !important;
+        height: ${viewH - padY * 2}px !important;
+        margin-top: ${padY}px !important;
+        padding: 0 ${padX}px !important;
+        column-width: ${colWidth}px !important;
+        column-gap: ${colGap}px !important;
+        column-fill: auto !important;
+        transition: ${isEinkOrInstant ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'} !important;
+        will-change: transform;
+      }
+      `}
+      p {
+        margin: 0.55em 0 !important;
+        text-indent: ${this.settings.indent ? '2em' : '0'} !important;
+        text-align: ${this.settings.justify ? 'justify' : 'left'} !important;
+      }
+      h1, h2, h3, h4 {
+        color: ${palette.fg} !important;
+        text-indent: 0 !important;
+        line-height: 1.35 !important;
+        break-inside: avoid;
+      }
+      img, svg {
+        max-width: 100% !important;
+        max-height: ${viewH - 80}px !important;
+        height: auto !important;
+        display: block;
+        margin: 12px auto;
+        break-inside: avoid;
+      }
+      blockquote {
+        margin: 1em 0 !important;
+        padding: 8px 14px !important;
+        border-left: 3px solid ${palette.accent} !important;
+        background: ${palette.quoteBg} !important;
+        color: ${palette.muted} !important;
+      }
+      mark.xxyxx-highlight {
+        color: inherit;
+        padding: 1px 0;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      mark.xxyxx-highlight[data-color="zhusha"] {
+        background: rgba(194, 53, 49, 0.24);
+        border-bottom: 2px solid #c23531;
+      }
+      mark.xxyxx-highlight[data-color="zhuqing"] {
+        background: rgba(49, 112, 86, 0.24);
+        border-bottom: 2px solid #317056;
+      }
+      mark.xxyxx-highlight[data-color="songyan"] {
+        background: rgba(92, 96, 104, 0.24);
+        border-bottom: 2px solid #5c6068;
+      }
+      mark.xxyxx-highlight[data-color="qiukui"] {
+        background: rgba(184, 134, 11, 0.24);
+        border-bottom: 2px solid #b8860b;
+      }
+    `;
+  }
+
+  _recalculatePagination() {
+    const doc = this.iframe.contentDocument;
+    if (!doc) return;
+    const root = doc.getElementById('xxyxx-reader-root');
+    if (!root) return;
+
+    if (this.settings.flipMode === 'continuous') {
+      this.totalPagesInSection = 1;
+      this.currentPage = 0;
+      root.style.transform = 'none';
+      return;
+    }
+
+    const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
+    const scrollW = Math.max(viewW, root.scrollWidth);
+    this.totalPagesInSection = Math.max(1, Math.round(scrollW / viewW));
+    if (this.currentPage >= this.totalPagesInSection) {
+      this.currentPage = this.totalPagesInSection - 1;
+    }
+  }
+
+  _applyPageOffset(animate = true) {
+    const doc = this.iframe.contentDocument;
+    if (!doc) return;
+    const root = doc.getElementById('xxyxx-reader-root');
+    if (!root) return;
+
+    if (this.settings.flipMode === 'continuous') {
+      root.style.transform = 'none';
+      return;
+    }
+    const palette = ThemeManager.getPalette();
+    const shouldAnimate = animate && !palette.isEink && this.settings.flipMode === 'horiz_slide';
+    root.style.transition = shouldAnimate ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none';
+
+    const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
+    const offset = -this.currentPage * viewW;
+    root.style.transform = `translate3d(${offset}px, 0, 0)`;
+  }
+
+  _bindIframeEvents() {
+    const doc = this.iframe.contentDocument;
+    if (!doc) return;
+
+    // 1. 转发键盘事件至外层 window
+    doc.addEventListener('keydown', (e) => {
+      this.dispatchEvent(new CustomEvent('reader-keydown', {
+        detail: { key: e.key, keyCode: e.keyCode, originalEvent: e }
+      }));
+    });
+
+    // 2. 监听选词完成事件（触发四色印彩浮层）
+    let selectionJustHappened = false;
+    const handleSelectionEnd = (e) => {
+      const sel = doc.getSelection();
+      if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+      const range = sel.getRangeAt(0);
+      const cfiData = CFIEngine.fromRange(range, this.currentSectionIndex);
+      if (!cfiData) return;
+
+      selectionJustHappened = true;
+      setTimeout(() => { selectionJustHappened = false; }, 280);
+
+      const rect = range.getBoundingClientRect();
+      const frameRect = this.iframe.getBoundingClientRect();
+      this.dispatchEvent(new CustomEvent('text-selected', {
+        detail: {
+          ...cfiData,
+          chapterIndex: this.currentSectionIndex,
+          chapterTitle: this.getCurrentChapterTitle(),
+          clientX: frameRect.left + rect.left + rect.width / 2,
+          clientY: frameRect.top + rect.bottom
+        }
+      }));
+    };
+    doc.addEventListener('mouseup', handleSelectionEnd);
+    doc.addEventListener('touchend', handleSelectionEnd);
+
+    // 3. 左右滑动手势支持
+    let touchStartX = null;
+    let touchStartY = null;
+    doc.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+    }, { passive: true });
+
+    doc.addEventListener('touchend', (e) => {
+      if (touchStartX === null || e.changedTouches.length === 0) return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      touchStartX = null;
+      touchStartY = null;
+      if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5 && this.settings.flipMode !== 'continuous') {
+        if (dx < 0) this.next();
+        else this.prev();
+      }
+    }, { passive: true });
+
+    // 4. 点击事件（已有高亮点击编辑，或二维九宫格触控热区判定）
+    doc.addEventListener('click', (e) => {
+      if (selectionJustHappened) return;
+      const sel = doc.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+
+      const markEl = e.target.closest && e.target.closest('mark.xxyxx-highlight');
+      if (markEl) {
+        e.stopPropagation();
+        const annId = markEl.getAttribute('data-ann-id');
+        const rect = markEl.getBoundingClientRect();
+        const frameRect = this.iframe.getBoundingClientRect();
+        this.dispatchEvent(new CustomEvent('annotation-clicked', {
+          detail: {
+            id: annId,
+            clientX: frameRect.left + rect.left + rect.width / 2,
+            clientY: frameRect.top + rect.bottom
+          }
+        }));
+        return;
+      }
+
+      if (e.target.closest && e.target.closest('a[href]')) return;
+
+      const viewW = this.iframe.clientWidth || window.innerWidth;
+      const viewH = this.iframe.clientHeight || window.innerHeight;
+      const xRatio = e.clientX / viewW;
+      const yRatio = e.clientY / viewH;
+
+      this.dispatchEvent(new CustomEvent('viewport-tap', {
+        detail: { xRatio, yRatio }
+      }));
+    });
+
+    // 5. 连续滚动模式下更新进度
+    doc.addEventListener('scroll', () => {
+      if (this.settings.flipMode === 'continuous') {
+        this._emitRelocate();
+      }
+    }, { passive: true });
+  }
+
+  renderAnnotationsInCurrentSection() {
+    const doc = this.iframe.contentDocument;
+    if (!doc) return;
+    const root = doc.getElementById('xxyxx-reader-root');
+    if (!root) return;
+
+    // 清理旧的包裹标签
+    for (const oldMark of Array.from(root.querySelectorAll('mark.xxyxx-highlight'))) {
+      const parent = oldMark.parentNode;
+      while (oldMark.firstChild) parent.insertBefore(oldMark.firstChild, oldMark);
+      parent.removeChild(oldMark);
+      parent.normalize();
+    }
+
+    const secAnns = this.annotations.filter((a) => {
+      if (typeof a.chapter_index === 'number' && a.chapter_index === this.currentSectionIndex) {
+        return true;
+      }
+      return CFIEngine.parseSectionIndex(a.cfi) === this.currentSectionIndex;
+    });
+
+    for (const ann of secAnns) {
+      this._highlightTextInRoot(doc, root, ann);
+    }
+  }
+
+  _highlightTextInRoot(doc, root, ann) {
+    const target = (ann.selected_text || '').trim();
+    if (!target) return;
+
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const idx = node.nodeValue.indexOf(target);
+      if (idx >= 0) {
+        try {
+          const range = doc.createRange();
+          range.setStart(node, idx);
+          range.setEnd(node, idx + target.length);
+          const mark = doc.createElement('mark');
+          mark.className = 'xxyxx-highlight';
+          mark.setAttribute('data-ann-id', ann.id);
+          mark.setAttribute('data-color', ann.color || 'zhusha');
+          if (ann.note) mark.title = ann.note;
+          range.surroundContents(mark);
+          return;
+        } catch (_) {}
+      }
+    }
+  }
+
+  getCurrentChapterTitle() {
+    if (!this.book || !this.book.sections[this.currentSectionIndex]) return '';
+    return this.book.sections[this.currentSectionIndex].title;
+  }
+
+  _emitRelocate() {
+    if (!this.book || !this.book.sections.length) return;
+    const secCount = this.book.sections.length;
+    let withinSecRatio = 0;
+
+    if (this.settings.flipMode === 'continuous') {
+      const doc = this.iframe.contentDocument;
+      if (doc) {
+        const maxScroll = Math.max(1, doc.documentElement.scrollHeight - this.iframe.clientHeight);
+        withinSecRatio = Math.min(1, Math.max(0, doc.documentElement.scrollTop / maxScroll));
+      }
+    } else {
+      withinSecRatio = this.totalPagesInSection > 1
+        ? this.currentPage / (this.totalPagesInSection - 1)
+        : 1;
+    }
+
+    const overallRatio = (this.currentSectionIndex + withinSecRatio / Math.max(1, this.totalPagesInSection)) / secCount;
+    const percent = Math.min(100, Math.max(0, Number((overallRatio * 100).toFixed(1))));
+    const spineStep = (this.currentSectionIndex + 1) * 2;
+    const cfi = `epubcfi(/6/${spineStep}![p:${this.currentPage}/${this.totalPagesInSection}])`;
+    const chapterTitle = this.getCurrentChapterTitle();
+
+    this.dispatchEvent(new CustomEvent('relocate', {
+      detail: {
+        sectionIndex: this.currentSectionIndex,
+        sectionCount: secCount,
+        page: this.currentPage + 1,
+        totalPages: this.totalPagesInSection,
+        percent,
+        cfi,
+        chapterTitle
+      }
+    }));
+  }
+}
+
+if (!customElements.get('foliate-view')) {
+  customElements.define('foliate-view', FoliateView);
+}

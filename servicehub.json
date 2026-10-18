@@ -1,0 +1,33 @@
+{
+  "name": "xxyxx-reader",
+  "title": "XXYXXReader · 阅境",
+  "category": "productivity",
+  "executable": "/Volumes/ROG/AIProjects/XXYXXReader/bin/xxyxx-reader",
+  "args": ["-config", "/Volumes/ROG/AIProjects/XXYXXReader/config.json"],
+  "cwd": "/Volumes/ROG/AIProjects/XXYXXReader",
+  "auto_start": true,
+  "keep_alive": true,
+  "port": 8980,
+  "health_check": {
+    "url": "http://127.0.0.1:8980/api/health",
+    "interval_seconds": 30,
+    "timeout_seconds": 3
+  },
+  "actions": [
+    {
+      "label": "打开水墨书架",
+      "action": "open_url",
+      "url": "http://127.0.0.1:8980/"
+    },
+    {
+      "label": "打开书库文件夹",
+      "action": "open_folder",
+      "path": "/Volumes/ROG/AIProjects/XXYXXReader/library"
+    },
+    {
+      "label": "打开 Obsidian 笔记",
+      "action": "open_folder",
+      "path": "/Volumes/ROG/AIProjects/XXYXXReader/notes"
+    }
+  ]
+}

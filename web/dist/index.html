@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="rice-paper">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XXYXXReader · 阅境 —— 水墨宣纸藏书阁</title>
+  <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/bookshelf.css" />
+</head>
+<body>
+  <div class="texture-layer" aria-hidden="true"></div>
+
+  <main class="app-shell">
+    <!-- 顶部斋号与全局工具栏 -->
+    <header class="shelf-header">
+      <div class="brand-wrap">
+        <div class="brand-seal">阅境</div>
+        <div>
+          <h1 class="brand-title">XXYXXReader · 阅境</h1>
+          <p class="brand-subtitle">宣纸水墨 · 文件夹即分卷 · 墨水屏 0ms 瞬切 · 划线直写 Obsidian</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="search-box">
+          <input id="search-input" class="input-field" type="search" placeholder="检索书名、著者、分卷…" />
+        </div>
+
+        <select id="sort-select" class="select-field" title="排序方式">
+          <option value="recent">按最近开卷</option>
+          <option value="progress">按研读进度</option>
+          <option value="title">按书名音序</option>
+          <option value="created">按入藏时间</option>
+        </select>
+
+        <select id="theme-select" class="select-field" title="切换视觉主题">
+          <option value="rice-paper">主题：宣纸墨香</option>
+          <option value="e-ink">主题：墨水屏纯黑白</option>
+          <option value="modern-white">主题：现代素白</option>
+          <option value="dark-ink">主题：水墨暗夜</option>
+        </select>
+
+        <button id="btn-toggle-view" class="btn" type="button">切换：水墨书目</button>
+        <button id="btn-scan-library" class="btn" type="button" title="立即扫描本地 library/ 目录">同步书库</button>
+        <a class="btn" href="/opds" target="_blank" title="KOReader OPDS 订阅源">OPDS 源</a>
+        <button id="btn-open-upload" class="btn btn-primary" type="button">+ 入阁藏书</button>
+      </div>
+    </header>
+
+    <!-- 分类胶囊导航与管理栏 -->
+    <section class="category-bar" aria-label="藏书分卷导航">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+        <div id="category-pills" class="category-pills"></div>
+        <button id="btn-new-category" class="btn" style="padding:5px 11px;font-size:12.5px;" type="button">+ 新建分卷</button>
+      </div>
+
+      <div class="category-actions">
+        <div id="active-cat-actions" style="display:none;gap:8px;">
+          <button id="btn-rename-category" class="btn" style="padding:5px 10px;font-size:12px;" type="button">重命名分卷</button>
+          <button id="btn-delete-category" class="btn btn-danger" style="padding:5px 10px;font-size:12px;" type="button">移除分卷</button>
+        </div>
+        <span id="total-books-badge" style="font-size:12.5px;color:var(--stone);">共 0 册典籍</span>
+      </div>
+    </section>
+
+    <!-- 藏书画廊 / 水墨存目容器 -->
+    <section id="books-container"></section>
+  </main>
+
+  <!-- 模态框 1：新建 / 重命名分类 -->
+  <div id="modal-category" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-category-title" class="modal-title">新建藏书分卷</h3>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;color:var(--stone);margin-bottom:8px;">
+          分卷名称（将同步在本地 <code>library/</code> 下创建或重命名同名子文件夹）：
+        </label>
+        <input id="input-category-name" class="input-field" style="width:100%;" type="text" placeholder="例如：史部·典籍、格物·技术、文苑·随笔" />
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-category" class="btn" type="button">取消</button>
+        <button id="btn-save-category" class="btn btn-primary" type="button">保存同步</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模态框 2：上传电子书 -->
+  <div id="modal-upload" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">入阁藏书 · 上传本地典籍</h3>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div>
+          <label style="display:block;font-size:13px;color:var(--stone);margin-bottom:6px;">选择电子书文件（支持 EPUB / AZW3 / MOBI / MD / TXT）：</label>
+          <input id="upload-file-input" class="input-field" style="width:100%;" type="file" accept=".epub,.azw3,.mobi,.md,.txt" />
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;color:var(--stone);margin-bottom:6px;">归入分卷（将自动存入对应物理子目录）：</label>
+          <select id="upload-category-select" class="select-field" style="width:100%;"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-upload" class="btn" type="button">取消</button>
+        <button id="btn-submit-upload" class="btn btn-primary" type="button">上传并解析</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/bookshelf.js"></script>
+</body>
+</html>

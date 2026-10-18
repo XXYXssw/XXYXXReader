@@ -1,0 +1,273 @@
+/* ==========================================================================
+   XXYXXReader · 阅境 —— 东方水墨宣纸与四套主题设计令牌 (Design Tokens)
+   ========================================================================== */
+
+:root,
+[data-theme="rice-paper"] {
+  --ink: #2c2824;
+  --stone: #6b6358;
+  --clay: #9a8f82;
+  --rice-paper: #e6e1d8;
+  --paper-card: #ece7de;
+  --void-soft: #f4f0e9;
+  --patina: #c4b8a8;
+  --moss: #5a6355;
+  --rust: #8b6f5c;
+  --seal-red: #b23b32;
+  --crack: rgba(44, 40, 36, 0.12);
+  --crack-light: rgba(44, 40, 36, 0.06);
+  --shadow-soft: 0 4px 16px rgba(44, 40, 36, 0.08);
+  --texture-opacity: 0.32;
+  --transition-fast: 180ms ease;
+
+  /* 文人四色印彩 */
+  --color-zhusha: #c23531;
+  --color-zhuqing: #317056;
+  --color-songyan: #5c6068;
+  --color-qiukui: #b8860b;
+
+  --font-serif: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", Georgia, serif;
+  --font-kaiti: "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif CJK SC", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+
+/* 2. 墨水屏纯黑白主题 (E-Ink 0ms 瞬切、零残影高对比) */
+[data-theme="e-ink"] {
+  --ink: #000000;
+  --stone: #222222;
+  --clay: #000000;
+  --rice-paper: #ffffff;
+  --paper-card: #ffffff;
+  --void-soft: #ffffff;
+  --patina: #000000;
+  --moss: #000000;
+  --rust: #000000;
+  --seal-red: #000000;
+  --crack: #000000;
+  --crack-light: #444444;
+  --shadow-soft: none;
+  --texture-opacity: 0;
+  --transition-fast: 0ms;
+}
+
+/* 3. 现代素白主题 */
+[data-theme="modern-white"] {
+  --ink: #1a1a1a;
+  --stone: #5c636a;
+  --clay: #adb5bd;
+  --rice-paper: #f8f9fa;
+  --paper-card: #ffffff;
+  --void-soft: #ffffff;
+  --patina: #dee2e6;
+  --moss: #2b6cb0;
+  --rust: #3b5bdb;
+  --seal-red: #c92a2a;
+  --crack: rgba(0, 0, 0, 0.09);
+  --crack-light: rgba(0, 0, 0, 0.04);
+  --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.05);
+  --texture-opacity: 0;
+  --transition-fast: 160ms ease;
+}
+
+/* 4. 水墨暗夜主题 */
+[data-theme="dark-ink"] {
+  --ink: #c8c3ba;
+  --stone: #8f887d;
+  --clay: #5a544b;
+  --rice-paper: #1c1a17;
+  --paper-card: #25221e;
+  --void-soft: #2e2a25;
+  --patina: #423d36;
+  --moss: #7a8a73;
+  --rust: #b58d74;
+  --seal-red: #c45147;
+  --crack: rgba(200, 195, 186, 0.12);
+  --crack-light: rgba(200, 195, 186, 0.06);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --texture-opacity: 0;
+  --transition-fast: 180ms ease;
+}
+
+/* 全局重置 */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--rice-paper);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 墨水屏强制关闭所有动画与过渡 */
+[data-theme="e-ink"] *,
+[data-theme="e-ink"] *::before,
+[data-theme="e-ink"] *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+  box-shadow: none !important;
+}
+
+/* 低 GPU 开销的 128x128 平铺宣纸纹理层 */
+.texture-layer {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  opacity: var(--texture-opacity);
+  background-repeat: repeat;
+  background-size: 160px 160px;
+  background-image: url("data:image/svg+xml,%3Csvg width='160' height='160' viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.28'/%3E%3C/svg%3E");
+}
+
+[data-theme="e-ink"] .texture-layer,
+[data-theme="modern-white"] .texture-layer,
+[data-theme="dark-ink"] .texture-layer {
+  display: none !important;
+}
+
+/* 通用按钮与表单控件 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--void-soft);
+  border: 1px solid var(--patina);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  border-color: var(--rust);
+  background: var(--paper-card);
+}
+
+.btn-primary {
+  background: var(--rust);
+  color: #f9f6f0;
+  border-color: var(--rust);
+}
+
+[data-theme="e-ink"] .btn-primary {
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid #000000;
+}
+
+.btn-primary:hover {
+  opacity: 0.92;
+  background: var(--rust);
+}
+
+.btn-danger {
+  color: var(--seal-red);
+  border-color: var(--seal-red);
+}
+
+.input-field,
+.select-field {
+  padding: 7px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--void-soft);
+  border: 1px solid var(--patina);
+  border-radius: 4px;
+  outline: none;
+}
+
+.input-field:focus,
+.select-field:focus {
+  border-color: var(--rust);
+}
+
+/* 通用古风模态弹窗 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(28, 26, 23, 0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+[data-theme="e-ink"] .modal-backdrop {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.modal-backdrop.active {
+  display: flex;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--void-soft);
+  border: 1px solid var(--clay);
+  border-radius: 6px;
+  padding: 22px 24px;
+  box-shadow: var(--shadow-soft);
+}
+
+[data-theme="e-ink"] .modal-card {
+  border: 2px solid #000000;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--crack);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* 轻提示 Toast */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast-msg {
+  background: var(--ink);
+  color: var(--void-soft);
+  padding: 9px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--patina);
+}

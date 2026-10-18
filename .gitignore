@@ -1,0 +1,21 @@
+# 编译产物与运行时数据
+bin/xxyxx-reader
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/covers/*
+!data/covers/.gitkeep
+data/cache/*
+!data/cache/.gitkeep
+
+# macOS 与系统隐藏文件
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# 编辑器与临时文件
+.idea/
+.vscode/
+*.swp
+*.tmp
