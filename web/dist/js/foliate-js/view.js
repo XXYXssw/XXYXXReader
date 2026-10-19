@@ -16,6 +16,7 @@ export class FoliateView extends View {
       indent: true,
       justify: true
     };
+    this.annotations = [];
     this._lastTapTime = 0;
     this._customStyles = '';
 
@@ -49,7 +50,24 @@ export class FoliateView extends View {
       const { doc, index } = e.detail;
       if (!doc) return;
       this._bindDocEvents(doc, index);
+      this.renderAnnotationsInCurrentSection();
     });
+  }
+
+  setAnnotations(list) {
+    this.annotations = Array.isArray(list) ? list : [];
+    this.renderAnnotationsInCurrentSection();
+  }
+
+  renderAnnotationsInCurrentSection() {
+    if (!this.annotations || !this.annotations.length) return;
+    try {
+      for (const ann of this.annotations) {
+        if (ann.cfi) {
+          this.addAnnotation({ value: ann.cfi, color: ann.color || 'zhusha', id: ann.id });
+        }
+      }
+    } catch (_) {}
   }
 
   get currentSectionIndex() {
@@ -97,9 +115,12 @@ export class FoliateView extends View {
     const flow = this.settings.flipMode === 'continuous' ? 'scrolled' : 'paginated';
     this.renderer.setAttribute('flow', flow);
 
-    // 2. 版心留白 (直接注入 Paginator 外层 Grid --_margin 变量，绝对镜像对称！)
+    // 2. 版心左右留白控制 (直接作用于 Paginator 的 side-pad，由 Grid 绝对均分，清空外层 padding)
     const rawMargin = this.settings.margin !== undefined ? Math.max(0, Number(this.settings.margin)) : 28;
-    this.renderer.setAttribute('margin', `${rawMargin}px`);
+    this.style.paddingLeft = '0';
+    this.style.paddingRight = '0';
+    this.renderer.setAttribute('side-pad', `${rawMargin}px`);
+    this.renderer.setAttribute('margin', '0px');
     this.renderer.setAttribute('gap', '0%');
     this.renderer.setAttribute('max-inline-size', '820px');
 
@@ -214,6 +235,23 @@ export class FoliateView extends View {
   }
 
   _bindDocEvents(doc, sectionIndex) {
+    // 换算 iframe 内部坐标为全局真实屏幕坐标
+    const getScreenCoords = (clientX, clientY) => {
+      let fLeft = 0, fTop = 0;
+      try {
+        const frame = doc.defaultView?.frameElement;
+        if (frame) {
+          const fr = frame.getBoundingClientRect();
+          fLeft = fr.left;
+          fTop = fr.top;
+        }
+      } catch (_) {}
+      return {
+        x: fLeft + clientX,
+        y: fTop + clientY
+      };
+    };
+
     // 1. 键盘与实体按键转发至父层
     doc.addEventListener('keydown', (e) => {
       this.dispatchEvent(new CustomEvent('reader-keydown', {
@@ -252,22 +290,20 @@ export class FoliateView extends View {
         return;
       }
 
-      // 瞬时点按 (Tap) 判定
+      // 瞬时点按 (Tap) 判定 (精确换算为全局屏幕百分比)
       if (Math.abs(dx) < 18 && Math.abs(dy) < 18 && dt < 450) {
         const target = e.target;
         if (target && target.closest && (target.closest('a[href]') || target.closest('mark.xxyxx-highlight'))) return;
-        const viewW = window.innerWidth;
-        const viewH = window.innerHeight;
-        this._emitTap(endX / viewW, endY / viewH, e);
+        const coords = getScreenCoords(endX, endY);
+        this._emitTap(coords.x / window.innerWidth, coords.y / window.innerHeight, e);
       }
     }, { passive: true });
 
     doc.addEventListener('click', (e) => {
       const target = e.target;
       if (target && target.closest && (target.closest('a[href]') || target.closest('mark.xxyxx-highlight'))) return;
-      const viewW = window.innerWidth;
-      const viewH = window.innerHeight;
-      this._emitTap(e.clientX / viewW, e.clientY / viewH, e);
+      const coords = getScreenCoords(e.clientX, e.clientY);
+      this._emitTap(coords.x / window.innerWidth, coords.y / window.innerHeight, e);
     });
 
     // 3. 选词完成通知 (触发四色印彩划线批注)

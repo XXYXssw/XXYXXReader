@@ -423,7 +423,7 @@ class View {
 // NOTE: everything here assumes the so-called "negative scroll type" for RTL
 export class Paginator extends HTMLElement {
     static observedAttributes = [
-        'flow', 'gap', 'margin',
+        'flow', 'gap', 'margin', 'side-pad',
         'max-inline-size', 'max-block-size', 'max-column-count',
     ]
     #root = this.attachShadow({ mode: 'closed' })
@@ -464,27 +464,28 @@ export class Paginator extends HTMLElement {
             height: 100%;
         }
         #top {
-            --_gap: 7%;
-            --_margin: 48px;
-            --_max-inline-size: 720px;
+            --_gap: 0px;
+            --_margin: 0px;
+            --_side-pad: 20px;
+            --_max-inline-size: 820px;
             --_max-block-size: 1440px;
             --_max-column-count: 2;
             --_max-column-count-portrait: 1;
             --_max-column-count-spread: var(--_max-column-count);
-            --_half-gap: calc(var(--_gap) / 2);
+            --_half-gap: 0px;
             --_max-width: calc(var(--_max-inline-size) * var(--_max-column-count-spread));
             --_max-height: var(--_max-block-size);
             display: grid;
             grid-template-columns:
-                minmax(var(--_half-gap), 1fr)
-                var(--_half-gap)
-                minmax(0, calc(var(--_max-width) - var(--_gap)))
-                var(--_half-gap)
-                minmax(var(--_half-gap), 1fr);
+                minmax(var(--_side-pad), 1fr)
+                0px
+                minmax(0, var(--_max-width))
+                0px
+                minmax(var(--_side-pad), 1fr);
             grid-template-rows:
-                minmax(var(--_margin), 1fr)
-                minmax(0, var(--_max-height))
-                minmax(var(--_margin), 1fr);
+                0px
+                minmax(0, 1fr)
+                0px;
             &.vertical {
                 --_max-column-count-spread: var(--_max-column-count-portrait);
                 --_max-width: var(--_max-block-size);
@@ -636,8 +637,8 @@ export class Paginator extends HTMLElement {
             case 'max-column-count':
                 this.#top.style.setProperty('--_' + name, value)
                 break
+            case 'side-pad':
             case 'max-inline-size':
-                // needs explicit `render()` as it doesn't necessarily resize
                 this.#top.style.setProperty('--_' + name, value)
                 this.render()
                 break
