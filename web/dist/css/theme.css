@@ -88,6 +88,163 @@
   --transition-fast: 180ms ease;
 }
 
+/* ==========================================================================
+   以下五套配色参考自 CSS Zen Garden (csszengarden.com) 与 StyleStage
+   (stylestage.dev) 的开源设计稿，仅取其色相与气质，不搬布局。
+   ========================================================================== */
+
+/* 5. 青苔绿意 —— 参考 CSS Zen Garden #214 “Verde Moderna” (Dave Shea) */
+[data-theme="verde-moderna"] {
+  --ink: #2e484c;
+  --stone: #607476;
+  --clay: #809b7e;
+  --rice-paper: #edf4f0;
+  --paper-card: #e5ede8;
+  --void-soft: #f4f8f5;
+  --patina: #c0cac3;
+  --moss: #2d6360;
+  --rust: #0d8ba1;
+  --seal-red: #a9b995;
+  --crack: rgba(46, 72, 76, 0.13);
+  --crack-light: rgba(46, 72, 76, 0.06);
+  --shadow-soft: 0 4px 16px rgba(46, 72, 76, 0.10);
+  --texture-opacity: 0.18;
+  --transition-fast: 180ms ease;
+}
+
+/* 6. 海雾湛蓝 —— 参考 CSS Zen Garden #210 “Oceanscape” (Justin Gray) */
+[data-theme="oceanscape"] {
+  --ink: #122981;
+  --stone: #3e5d67;
+  --clay: #7d775c;
+  --rice-paper: #eef3fa;
+  --paper-card: #ffffff;
+  --void-soft: #f5f8fd;
+  --patina: #a5bcff;
+  --moss: #003d90;
+  --rust: #ff9600;
+  --seal-red: #ff9600;
+  --crack: rgba(18, 41, 129, 0.13);
+  --crack-light: rgba(18, 41, 129, 0.06);
+  --shadow-soft: 0 4px 16px rgba(18, 41, 129, 0.10);
+  --texture-opacity: 0.14;
+  --transition-fast: 180ms ease;
+}
+
+/* 7. 勃根第酒红 —— 参考 CSS Zen Garden #216 “Fountain Kiss” (Jeremy Carlson) */
+[data-theme="fountain-kiss"] {
+  --ink: #41071e;
+  --stone: #771139;
+  --clay: #aa3355;
+  --rice-paper: #fceec6;
+  --paper-card: #fdf5df;
+  --void-soft: #fffaf0;
+  --patina: #e3c79a;
+  --moss: #550028;
+  --rust: #5b0a2a;
+  --seal-red: #aa3355;
+  --crack: rgba(65, 7, 30, 0.15);
+  --crack-light: rgba(65, 7, 30, 0.07);
+  --shadow-soft: 0 4px 18px rgba(65, 7, 30, 0.12);
+  --texture-opacity: 0.20;
+  --transition-fast: 180ms ease;
+}
+
+/* 8. 深蓝墨绿 —— 参考 StyleStage “dark-navy-and-green” */
+[data-theme="navy-mint"] {
+  --ink: #ccd6f6;
+  --stone: #8892b0;
+  --clay: #5c6b8a;
+  --rice-paper: #0a192f;
+  --paper-card: #112240;
+  --void-soft: #16294a;
+  --patina: #2b3d5e;
+  --moss: #57cbff;
+  --rust: #64ffda;
+  --seal-red: #ff7b72;
+  --crack: rgba(204, 214, 246, 0.13);
+  --crack-light: rgba(204, 214, 246, 0.06);
+  --shadow-soft: 0 4px 20px rgba(2, 12, 27, 0.55);
+  --texture-opacity: 0;
+  --transition-fast: 180ms ease;
+}
+
+/* 9. 素纸蓝调 —— 参考 StyleStage “calm” */
+[data-theme="calm-paper"] {
+  --ink: #2f4858;
+  --stone: #51514d;
+  --clay: #8a8a80;
+  --rice-paper: #f4f3ee;
+  --paper-card: #ffffff;
+  --void-soft: #faf9f6;
+  --patina: #d6d4ca;
+  --moss: #463f3a;
+  --rust: #8a3528;
+  --seal-red: #8a3528;
+  --crack: rgba(47, 72, 88, 0.12);
+  --crack-light: rgba(47, 72, 88, 0.05);
+  --shadow-soft: 0 2px 14px rgba(47, 72, 88, 0.08);
+  --texture-opacity: 0.16;
+  --transition-fast: 180ms ease;
+}
+
+/* 10. 木墨静室 —— 参考 StyleStage “at-the-desk” */
+[data-theme="desk-wood"] {
+  --ink: #261712;
+  --stone: #8c6d51;
+  --clay: #bf9a78;
+  --rice-paper: #e9dbcd;
+  --paper-card: #f3ead9;
+  --void-soft: #f9f4ec;
+  --patina: #d8c1a9;
+  --moss: #456a82;
+  --rust: #b6382c;
+  --seal-red: #b6382c;
+  --crack: rgba(38, 23, 18, 0.14);
+  --crack-light: rgba(38, 23, 18, 0.06);
+  --shadow-soft: 0 4px 18px rgba(38, 23, 18, 0.12);
+  --texture-opacity: 0.26;
+  --transition-fast: 180ms ease;
+}
+
+/* 11. 蓝图蓝本 —— 参考 StyleStage “blueprint” */
+[data-theme="blueprint"] {
+  --ink: #26537e;
+  --stone: #487fcf;
+  --clay: #7fa6dd;
+  --rice-paper: #fdfcfa;
+  --paper-card: #ffffff;
+  --void-soft: #f6f9ff;
+  --patina: #c2d6f0;
+  --moss: #2e4f87;
+  --rust: #3a00ff;
+  --seal-red: #ff0000;
+  --crack: rgba(38, 83, 126, 0.14);
+  --crack-light: rgba(38, 83, 126, 0.06);
+  --shadow-soft: 0 2px 14px rgba(58, 0, 255, 0.08);
+  --texture-opacity: 0;
+  --transition-fast: 160ms ease;
+}
+
+/* 12. 午夜霓虹 —— 参考 StyleStage “atomic-clock” */
+[data-theme="midnight-neon"] {
+  --ink: #f2efe6;
+  --stone: #b9b3a4;
+  --clay: #7d776a;
+  --rice-paper: #070200;
+  --paper-card: #14100b;
+  --void-soft: #1e1913;
+  --patina: #3a332a;
+  --moss: #ffbb00;
+  --rust: #b12292;
+  --seal-red: #ffbb00;
+  --crack: rgba(242, 239, 230, 0.14);
+  --crack-light: rgba(242, 239, 230, 0.06);
+  --shadow-soft: 0 4px 22px rgba(0, 0, 0, 0.6);
+  --texture-opacity: 0;
+  --transition-fast: 180ms ease;
+}
+
 /* 全局重置 */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -127,7 +284,11 @@ html, body {
 
 [data-theme="e-ink"] .texture-layer,
 [data-theme="modern-white"] .texture-layer,
-[data-theme="dark-ink"] .texture-layer {
+[data-theme="dark-ink"] .texture-layer,
+[data-theme="oceanscape"] .texture-layer,
+[data-theme="navy-mint"] .texture-layer,
+[data-theme="blueprint"] .texture-layer,
+[data-theme="midnight-neon"] .texture-layer {
   display: none !important;
 }
 

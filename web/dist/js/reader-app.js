@@ -72,7 +72,7 @@ class ReaderApp {
       marginPct = raw <= 35 ? Math.max(0, raw) : Math.min(35, Math.round((raw / 1200) * 100));
     }
     this.settings = {
-      flipMode: saved.flipMode || 'instant_tap',
+      flipMode: saved.flipMode === 'continuous' ? 'continuous' : 'instant_tap',
       fontSize: Number(saved.fontSize) || 19,
       fontFamily: saved.fontFamily || 'serif',
       lineHeight: Number(saved.lineHeight) || 1.8,

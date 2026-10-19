@@ -198,6 +198,79 @@ export const ThemeManager = {
       accent: '#b58d74',
       quoteBg: 'rgba(200, 195, 186, 0.06)',
       isEink: false
+    },
+    // === 以下配色参考 CSS Zen Garden / StyleStage 开源设计稿 ===
+    'verde-moderna': {
+      name: '青苔绿意',
+      bg: '#edf4f0',
+      fg: '#2e484c',
+      muted: '#607476',
+      accent: '#0d8ba1',
+      quoteBg: 'rgba(45, 99, 96, 0.08)',
+      isEink: false
+    },
+    'oceanscape': {
+      name: '海雾湛蓝',
+      bg: '#eef3fa',
+      fg: '#122981',
+      muted: '#3e5d67',
+      accent: '#ff9600',
+      quoteBg: 'rgba(18, 41, 129, 0.07)',
+      isEink: false
+    },
+    'fountain-kiss': {
+      name: '勃根第酒红',
+      bg: '#fceec6',
+      fg: '#41071e',
+      muted: '#771139',
+      accent: '#aa3355',
+      quoteBg: 'rgba(85, 0, 40, 0.07)',
+      isEink: false
+    },
+    'navy-mint': {
+      name: '深蓝墨绿',
+      bg: '#0a192f',
+      fg: '#ccd6f6',
+      muted: '#8892b0',
+      accent: '#64ffda',
+      quoteBg: 'rgba(100, 255, 218, 0.08)',
+      isEink: false
+    },
+    'calm-paper': {
+      name: '素纸蓝调',
+      bg: '#f4f3ee',
+      fg: '#2f4858',
+      muted: '#51514d',
+      accent: '#8a3528',
+      quoteBg: 'rgba(47, 72, 88, 0.06)',
+      isEink: false
+    },
+    'desk-wood': {
+      name: '木墨静室',
+      bg: '#e9dbcd',
+      fg: '#261712',
+      muted: '#8c6d51',
+      accent: '#b6382c',
+      quoteBg: 'rgba(38, 23, 18, 0.07)',
+      isEink: false
+    },
+    'blueprint': {
+      name: '蓝图蓝本',
+      bg: '#fdfcfa',
+      fg: '#26537e',
+      muted: '#487fcf',
+      accent: '#3a00ff',
+      quoteBg: 'rgba(58, 0, 255, 0.05)',
+      isEink: false
+    },
+    'midnight-neon': {
+      name: '午夜霓虹',
+      bg: '#070200',
+      fg: '#f2efe6',
+      muted: '#b9b3a4',
+      accent: '#ffbb00',
+      quoteBg: 'rgba(255, 187, 0, 0.08)',
+      isEink: false
     }
   },
 

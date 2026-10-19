@@ -269,12 +269,8 @@ export class FoliateView extends View {
     const flow = this.settings.flipMode === 'continuous' ? 'scrolled' : 'paginated';
     this.renderer.setAttribute('flow', flow);
 
-    const shouldAnimate = !palette.isEink && this.settings.flipMode === 'horiz_slide';
-    if (shouldAnimate) {
-      this.renderer.setAttribute('animated', '');
-    } else {
-      this.renderer.removeAttribute('animated');
-    }
+    // 翻页始终为 0ms 瞬切（已移除水平平滑滑动模式），墨水屏与普通屏均无翻页动画
+    this.renderer.removeAttribute('animated');
 
     const marginPct = this.settings.margin !== undefined
       ? Math.max(0, Math.min(35, Number(this.settings.margin)))
@@ -497,7 +493,7 @@ export class FoliateView extends View {
         return;
       }
 
-      if (!this.renderer?.hasAttribute('animated') && Math.abs(dx) > 38 && Math.abs(dx) > Math.abs(dy) * 1.3 && this.settings.flipMode !== 'continuous') {
+      if (Math.abs(dx) > 38 && Math.abs(dx) > Math.abs(dy) * 1.3 && this.settings.flipMode !== 'continuous') {
         if (dx < 0) this.next();
         else this.prev();
         return;
