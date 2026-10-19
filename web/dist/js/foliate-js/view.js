@@ -254,6 +254,13 @@ export class FoliateView extends HTMLElement {
     const colWidth = Math.max(160, viewW - padX * 2);
     const colGap = padX * 2;
 
+    // 垂直整行网格对齐计算：严格保证栏高为整数行高，彻底杜绝半行字截断与跨页错行
+    const rawH = viewH - padY * 2;
+    const lineHeightPx = Number(this.settings.fontSize) * Number(this.settings.lineHeight);
+    const exactLines = Math.max(5, Math.floor(rawH / lineHeightPx));
+    const fittedH = Math.round(exactLines * lineHeightPx);
+    const topPad = Math.round(padY + (rawH - fittedH) / 2);
+
     styleEl.textContent = `
       html, body {
         margin: 0 !important;
@@ -281,13 +288,13 @@ export class FoliateView extends HTMLElement {
         overflow: hidden !important;
       }
       #xxyxx-reader-root {
-        box-sizing: border-box !important;
-        width: 100% !important;
-        height: ${viewH - padY * 2}px !important;
-        margin: ${padY}px 0 0 0 !important;
+        box-sizing: content-box !important;
+        width: ${colWidth}px !important;
+        height: ${fittedH}px !important;
+        margin: ${topPad}px 0 0 ${padX}px !important;
         padding: 0 !important;
-        column-width: ${viewW}px !important;
-        column-gap: 0 !important;
+        column-width: ${colWidth}px !important;
+        column-gap: ${colGap}px !important;
         column-fill: auto !important;
         transition: ${isEinkOrInstant ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'} !important;
         will-change: transform;
@@ -306,22 +313,19 @@ export class FoliateView extends HTMLElement {
         line-height: ${this.settings.lineHeight} !important;
       }
 
-      /* 统一逐页版心边距：内容两侧留出精确的 padX 留白，栏间跨距精确对齐 viewW，杜绝跨页漂移露字 */
+      /* 段落与块级子元素清空水平边距，严格在 colWidth 版心内自然排布，绝不嵌套叠加导致跨页丢字漂移 */
       #xxyxx-reader-root > *,
       #xxyxx-reader-root p,
       #xxyxx-reader-root div,
-      #xxyxx-reader-root h1,
-      #xxyxx-reader-root h2,
-      #xxyxx-reader-root h3,
-      #xxyxx-reader-root h4,
-      #xxyxx-reader-root h5,
-      #xxyxx-reader-root h6,
       #xxyxx-reader-root blockquote,
       #xxyxx-reader-root .content,
       #xxyxx-reader-root [class*="content"] {
-        padding-left: ${padX}px !important;
-        padding-right: ${padX}px !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
         box-sizing: border-box !important;
+        max-width: 100% !important;
       }
 
       #xxyxx-reader-root h1,
@@ -332,6 +336,10 @@ export class FoliateView extends HTMLElement {
       #xxyxx-reader-root h6 {
         color: ${palette.fg} !important;
         font-family: ${fontStack} !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
         text-indent: 0 !important;
         line-height: 1.35 !important;
         break-inside: avoid;
@@ -403,8 +411,12 @@ export class FoliateView extends HTMLElement {
 
     void root.offsetWidth; // 触发同步重排以获取最新的真实 scrollWidth
     const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
-    const scrollW = Math.max(viewW, root.scrollWidth);
-    this.totalPagesInSection = Math.max(1, Math.round(scrollW / viewW));
+    const padX = Number(this.settings.margin) || 28;
+    const colWidth = Math.max(160, viewW - padX * 2);
+    const colGap = padX * 2;
+    const pitch = colWidth + colGap;
+    const scrollW = Math.max(colWidth, root.scrollWidth);
+    this.totalPagesInSection = Math.max(1, Math.ceil((scrollW + colGap * 0.5) / pitch));
     if (this.currentPage >= this.totalPagesInSection) {
       this.currentPage = this.totalPagesInSection - 1;
     }

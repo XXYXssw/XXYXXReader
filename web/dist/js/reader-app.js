@@ -1,5 +1,5 @@
 // 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、墨水屏物理按键录制与进度同步
-import './foliate-js/view.js?v=2.0.2';
+import './foliate-js/view.js?v=2.0.6';
 import { ThemeManager, showToast } from './theme.js';
 import { AnnotatorController } from './annotator.js';
 
@@ -186,6 +186,7 @@ class ReaderApp {
     });
 
     // 5. 键盘与墨水屏实体按键支持
+    let lastTurnTime = 0;
     const handleKey = (rawKey, rawCode, origEvent) => {
       const { key, keyCode } = this._normalizeKey(rawKey, rawCode);
       if (this.recordingTarget) {
@@ -205,23 +206,20 @@ class ReaderApp {
         'ArrowLeft', 'PageUp', 'VolumeUp'
       ].includes(key) || [92, 24, 37, 21].includes(keyCode) || this.customKeys.prev.includes(token) || this.customKeys.prev.includes(key);
 
-      if (isNext) {
+      if (isNext || isPrev) {
         if (origEvent) origEvent.preventDefault();
-        this.view.next();
-      } else if (isPrev) {
-        if (origEvent) origEvent.preventDefault();
-        this.view.prev();
+        const now = Date.now();
+        // 280ms 严格翻页冷却保护：坚决杜绝物理按键连击或硬件 repeat 导致连续跳多页
+        if (now - lastTurnTime < 280) {
+          return;
+        }
+        lastTurnTime = now;
+        if (isNext) this.view.next();
+        else this.view.prev();
       }
     };
 
     window.addEventListener('keydown', (e) => handleKey(e.key, e.keyCode, e), true);
-    document.addEventListener('keydown', (e) => handleKey(e.key, e.keyCode, e), true);
-    window.addEventListener('keyup', (e) => {
-      if (this.recordingTarget) handleKey(e.key, e.keyCode, e);
-    }, true);
-    document.addEventListener('keyup', (e) => {
-      if (this.recordingTarget) handleKey(e.key, e.keyCode, e);
-    }, true);
     this.view.addEventListener('reader-keydown', (e) => {
       handleKey(e.detail.key, e.detail.keyCode, e.detail.originalEvent);
     });
