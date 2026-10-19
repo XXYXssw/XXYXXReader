@@ -78,13 +78,14 @@ export class AnnotatorController {
   }
 
   showForSelection(selectionDetail) {
+    const txt = selectionDetail.selectedText || selectionDetail.text || '';
     this.pendingSelection = {
       id: '',
       cfi: selectionDetail.cfi,
-      selected_text: selectionDetail.selectedText,
+      selected_text: txt,
       prefix_text: selectionDetail.prefixText || '',
       suffix_text: selectionDetail.suffixText || '',
-      chapter_index: selectionDetail.chapterIndex || 0,
+      chapter_index: selectionDetail.chapterIndex || selectionDetail.sectionIndex || 0,
       chapter_title: selectionDetail.chapterTitle || '',
       note: '',
       color: this.activeColor

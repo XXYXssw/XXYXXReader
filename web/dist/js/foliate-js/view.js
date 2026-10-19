@@ -60,13 +60,61 @@ export class FoliateView extends View {
   }
 
   renderAnnotationsInCurrentSection() {
-    if (!this.annotations || !this.annotations.length) return;
+    if (!this.annotations || !this.annotations.length || !this.renderer) return;
     try {
-      for (const ann of this.annotations) {
-        if (ann.cfi) {
-          this.addAnnotation({ value: ann.cfi, color: ann.color || 'zhusha', id: ann.id });
+      const contents = this.renderer.getContents ? this.renderer.getContents() : [];
+      for (const { doc, index } of contents) {
+        if (!doc || !doc.body) continue;
+        this._renderDocHighlights(doc, index);
+      }
+    } catch (_) {}
+  }
+
+  _renderDocHighlights(doc, sectionIndex) {
+    // 1. 清理已有标记
+    const oldMarks = Array.from(doc.querySelectorAll('mark.xxyxx-highlight'));
+    for (const m of oldMarks) {
+      const parent = m.parentNode;
+      while (m.firstChild) parent.insertBefore(m.firstChild, m);
+      parent.removeChild(m);
+      parent.normalize();
+    }
+
+    // 2. 匹配属于当前章节或全文的批注进行文字高亮渲染
+    for (const ann of this.annotations) {
+      const targetText = (ann.selected_text || '').trim();
+      if (!targetText) continue;
+
+      const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
+      let node;
+      while ((node = walker.nextNode())) {
+        const textVal = node.nodeValue;
+        const idx = textVal.indexOf(targetText);
+        if (idx >= 0) {
+          try {
+            const range = doc.createRange();
+            range.setStart(node, idx);
+            range.setEnd(node, idx + targetText.length);
+            const mark = doc.createElement('mark');
+            mark.className = 'xxyxx-highlight';
+            mark.setAttribute('data-ann-id', ann.id);
+            mark.setAttribute('data-color', ann.color || 'zhusha');
+            if (ann.note) mark.title = ann.note;
+            range.surroundContents(mark);
+            break;
+          } catch (_) {}
         }
       }
+    }
+  }
+
+  clearSelection() {
+    try {
+      const contents = this.renderer?.getContents ? this.renderer.getContents() : [];
+      for (const { doc } of contents) {
+        doc?.defaultView?.getSelection()?.removeAllRanges();
+      }
+      window.getSelection()?.removeAllRanges();
     } catch (_) {}
   }
 
@@ -115,13 +163,13 @@ export class FoliateView extends View {
     const flow = this.settings.flipMode === 'continuous' ? 'scrolled' : 'paginated';
     this.renderer.setAttribute('flow', flow);
 
-    // 2. 版心左右留白控制 (直接作用于 Paginator 的 side-pad，由 Grid 绝对均分，清空外层 padding)
-    const rawMargin = this.settings.margin !== undefined ? Math.max(0, Number(this.settings.margin)) : 28;
+    // 2. 版心左右留白控制 (由外层 Paginator 3列网格精确留白，内部排版自然充盈)
+    const rawMargin = this.settings.margin !== undefined ? Math.max(0, Number(this.settings.margin)) : 20;
     this.style.paddingLeft = '0';
     this.style.paddingRight = '0';
-    this.renderer.setAttribute('side-pad', `${rawMargin}px`);
+    this.renderer.setAttribute('side-margin', `${rawMargin}px`);
     this.renderer.setAttribute('margin', '0px');
-    this.renderer.setAttribute('gap', '0%');
+    this.renderer.setAttribute('gap', '0px');
     this.renderer.setAttribute('max-inline-size', '820px');
 
     // 3. 全局穿透 CSS (字号、行距、字体栈、两端对齐、段首缩进、主题配色)
@@ -279,9 +327,13 @@ export class FoliateView extends View {
       const dt = Date.now() - touchStartTime;
       touchStartX = null; touchStartY = null;
 
-      // 文本选词状态下避让翻页
+      // 文本选词状态下避让翻页，并立即触发选词印彩弹窗
       const sel = doc.getSelection();
-      if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+      if (sel && !sel.isCollapsed && sel.toString().trim()) {
+        handleSelectionEnd();
+        setTimeout(handleSelectionEnd, 140);
+        return;
+      }
 
       // 水平滑动手势
       if (Math.abs(dx) > 38 && Math.abs(dx) > Math.abs(dy) * 1.3 && this.settings.flipMode !== 'continuous') {
@@ -300,6 +352,24 @@ export class FoliateView extends View {
     }, { passive: true });
 
     doc.addEventListener('click', (e) => {
+      // 1. 点击已有高亮编辑/删除
+      const mark = e.target.closest && e.target.closest('mark.xxyxx-highlight');
+      if (mark) {
+        e.preventDefault();
+        e.stopPropagation();
+        const annId = mark.getAttribute('data-ann-id');
+        const rect = mark.getBoundingClientRect();
+        const coords = getScreenCoords(rect.left + rect.width / 2, rect.bottom);
+        this.dispatchEvent(new CustomEvent('annotation-clicked', {
+          detail: {
+            id: annId,
+            clientX: coords.x,
+            clientY: coords.y
+          }
+        }));
+        return;
+      }
+
       const target = e.target;
       if (target && target.closest && (target.closest('a[href]') || target.closest('mark.xxyxx-highlight'))) return;
       const coords = getScreenCoords(e.clientX, e.clientY);
@@ -314,32 +384,40 @@ export class FoliateView extends View {
         try {
           const sel = doc.getSelection();
           if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+          const selectedStr = sel.toString().trim();
           const range = sel.getRangeAt(0);
           const cfi = this.getCFI(sectionIndex, range);
           const rect = range.getBoundingClientRect();
-          const iframes = this.shadowRoot.querySelectorAll('iframe');
-          let frameRect = { left: 0, top: 0 };
-          for (const iframe of iframes) {
-            if (iframe.contentDocument === doc) {
-              frameRect = iframe.getBoundingClientRect();
-              break;
-            }
-          }
+          const coords = getScreenCoords(rect.left + rect.width / 2, rect.top - 10);
+
+          console.log('[XXYXX-SEL]', 'selection triggered:', selectedStr);
           this.dispatchEvent(new CustomEvent('text-selected', {
             detail: {
               cfi: typeof cfi === 'string' ? cfi : '',
-              text: sel.toString().trim(),
+              selectedText: selectedStr,
+              text: selectedStr,
+              chapterIndex: sectionIndex,
+              chapterTitle: this.book?.sections?.[sectionIndex]?.title || '',
               sectionIndex,
-              clientX: frameRect.left + rect.left + rect.width / 2,
-              clientY: frameRect.top + rect.top - 10
+              clientX: coords.x,
+              clientY: coords.y
             }
           }));
-        } catch (_) {}
+        } catch (err) {
+          console.error('[XXYXX-SEL-ERR]', err.message, err.stack);
+        }
       }, 180);
     };
 
     doc.addEventListener('selectionchange', handleSelectionEnd);
-    doc.addEventListener('contextmenu', () => setTimeout(handleSelectionEnd, 120));
+    doc.addEventListener('mouseup', () => {
+      handleSelectionEnd();
+      setTimeout(handleSelectionEnd, 140);
+    });
+    doc.addEventListener('contextmenu', () => {
+      handleSelectionEnd();
+      setTimeout(handleSelectionEnd, 140);
+    });
   }
 
   _emitTap(xRatio, yRatio, origEvent) {

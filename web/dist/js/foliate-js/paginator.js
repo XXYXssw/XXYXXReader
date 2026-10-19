@@ -306,7 +306,7 @@ class View {
         this.setImageSize()
         this.expand()
     }
-    columnize({ width, height, gap, columnWidth }) {
+    columnize({ width, height, gap = 0, columnWidth }) {
         const vertical = this.#vertical
         this.#size = vertical ? height : width
 
@@ -319,7 +319,7 @@ class View {
             ...(vertical
                 ? { 'width': `${width}px` }
                 : { 'height': `${height}px` }),
-            'padding': vertical ? `${gap / 2}px 0` : `0 ${gap / 2}px`,
+            'padding': '0',
             'overflow': 'hidden',
             // force wrap long words
             'overflow-wrap': 'break-word',
@@ -423,7 +423,7 @@ class View {
 // NOTE: everything here assumes the so-called "negative scroll type" for RTL
 export class Paginator extends HTMLElement {
     static observedAttributes = [
-        'flow', 'gap', 'margin', 'side-pad',
+        'flow', 'gap', 'margin', 'side-margin',
         'max-inline-size', 'max-block-size', 'max-column-count',
     ]
     #root = this.attachShadow({ mode: 'closed' })
@@ -466,26 +466,23 @@ export class Paginator extends HTMLElement {
         #top {
             --_gap: 0px;
             --_margin: 0px;
-            --_side-pad: 20px;
+            --_side-margin: 20px;
             --_max-inline-size: 820px;
             --_max-block-size: 1440px;
             --_max-column-count: 2;
             --_max-column-count-portrait: 1;
             --_max-column-count-spread: var(--_max-column-count);
-            --_half-gap: 0px;
             --_max-width: calc(var(--_max-inline-size) * var(--_max-column-count-spread));
             --_max-height: var(--_max-block-size);
             display: grid;
             grid-template-columns:
-                minmax(var(--_side-pad), 1fr)
-                0px
+                minmax(var(--_side-margin), 1fr)
                 minmax(0, var(--_max-width))
-                0px
-                minmax(var(--_side-pad), 1fr);
+                minmax(var(--_side-margin), 1fr);
             grid-template-rows:
                 0px
-                minmax(0, 1fr)
-                0px;
+                1fr
+                28px;
             &.vertical {
                 --_max-column-count-spread: var(--_max-column-count-portrait);
                 --_max-width: var(--_max-block-size);
@@ -505,8 +502,8 @@ export class Paginator extends HTMLElement {
             grid-row: 1 / -1;
         }
         #container {
-            grid-column: 2 / 5;
-            grid-row: 2;
+            grid-column: 2 / 3;
+            grid-row: 2 / 3;
             overflow: hidden;
         }
         :host([flow="scrolled"]) #container {
@@ -637,7 +634,7 @@ export class Paginator extends HTMLElement {
             case 'max-column-count':
                 this.#top.style.setProperty('--_' + name, value)
                 break
-            case 'side-pad':
+            case 'side-margin':
             case 'max-inline-size':
                 this.#top.style.setProperty('--_' + name, value)
                 this.render()
@@ -694,43 +691,23 @@ export class Paginator extends HTMLElement {
         const margin = parseFloat(style.getPropertyValue('--_margin'))
         this.#margin = margin
 
-        const g = parseFloat(style.getPropertyValue('--_gap')) / 100
-        // The gap will be a percentage of the #container, not the whole view.
-        // This means the outer padding will be bigger than the column gap. Let
-        // `a` be the gap percentage. The actual percentage for the column gap
-        // will be (1 - a) * a. Let us call this `b`.
-        //
-        // To make them the same, we start by shrinking the outer padding
-        // setting to `b`, but keep the column gap setting the same at `a`. Then
-        // the actual size for the column gap will be (1 - b) * a. Repeating the
-        // process again and again, we get the sequence
-        //     x₁ = (1 - b) * a
-        //     x₂ = (1 - x₁) * a
-        //     ...
-        // which converges to x = (1 - x) * a. Solving for x, x = a / (1 + a).
-        // So to make the spacing even, we must shrink the outer padding with
-        //     f(x) = x / (1 + x).
-        // But we want to keep the outer padding, and make the inner gap bigger.
-        // So we apply the inverse, f⁻¹ = -x / (x - 1) to the column gap.
-        const gap = -g / (g - 1) * size
-
         const flow = this.getAttribute('flow')
         if (flow === 'scrolled') {
-            // FIXME: vertical-rl only, not -lr
             this.setAttribute('dir', vertical ? 'rtl' : 'ltr')
             this.#top.style.padding = '0'
-            const columnWidth = maxInlineSize
+            const columnWidth = Math.min(width, maxInlineSize)
 
             this.heads = null
             this.feet = null
             this.#header.replaceChildren()
             this.#footer.replaceChildren()
 
-            return { flow, margin, gap, columnWidth }
+            return { flow, margin, gap: 0, columnWidth }
         }
 
         const divisor = Math.min(maxColumnCount, Math.ceil(size / maxInlineSize))
-        const columnWidth = (size / divisor) - gap
+        const gap = 0
+        const columnWidth = size / divisor
         this.setAttribute('dir', rtl ? 'rtl' : 'ltr')
 
         const marginalDivisor = vertical
@@ -750,7 +727,7 @@ export class Paginator extends HTMLElement {
         this.#header.replaceChildren(...heads)
         this.#footer.replaceChildren(...feet)
 
-        return { height, width, margin, gap, columnWidth }
+        return { height, width, margin, gap, columnWidth, sidePad }
     }
     render() {
         if (!this.#view) return

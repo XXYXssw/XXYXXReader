@@ -1,5 +1,5 @@
 // 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、墨水屏物理按键录制与进度同步
-import './foliate-js/view.js?v=3.1.4';
+import './foliate-js/view.js?v=3.3.2';
 import { ThemeManager, showToast } from './theme.js';
 import { AnnotatorController } from './annotator.js';
 
