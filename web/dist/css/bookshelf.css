@@ -162,8 +162,8 @@
 /* 视图模式 1：宣纸封套卡片画廊 */
 .books-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
-  gap: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 12px;
 }
 
 .book-card {
@@ -171,7 +171,7 @@
   flex-direction: column;
   background: var(--paper-card);
   border: 1px solid var(--crack);
-  border-radius: 6px;
+  border-radius: 5px;
   overflow: hidden;
   transition: transform var(--transition-fast), border-color var(--transition-fast);
   position: relative;
@@ -205,54 +205,55 @@
 
 .book-badges-top {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  right: 10px;
+  top: 5px;
+  left: 5px;
+  right: 5px;
   display: flex;
   justify-content: space-between;
+  gap: 3px;
   pointer-events: none;
 }
 
 .badge-format {
-  padding: 2px 7px;
-  font-size: 11px;
+  padding: 1.5px 5px;
+  font-size: 9.5px;
   font-family: var(--font-sans);
   text-transform: uppercase;
   background: var(--void-soft);
   color: var(--stone);
   border: 1px solid var(--patina);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .badge-progress {
-  padding: 2px 8px;
-  font-size: 11px;
+  padding: 1.5px 5px;
+  font-size: 9.5px;
   background: var(--seal-red);
   color: #f9f6f0;
-  border-radius: 3px;
-  letter-spacing: 0.03em;
+  border-radius: 2px;
+  letter-spacing: 0.02em;
 }
 
 [data-theme="e-ink"] .badge-progress {
   background: #ffffff;
   color: #000000;
-  border: 1.5px solid #000000;
+  border: 1.2px solid #000000;
   font-weight: 700;
 }
 
 .book-body {
-  padding: 13px 14px 14px;
+  padding: 8px 8px 8px;
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 6px;
+  gap: 4px;
 }
 
 .book-title {
   margin: 0;
-  font-size: 15.5px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--ink);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -262,33 +263,42 @@
 }
 
 .book-meta {
-  font-size: 12.5px;
+  font-size: 10.5px;
   color: var(--stone);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .book-footer {
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 6px;
   border-top: 1px dashed var(--crack);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.book-footer-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  width: 100%;
+  gap: 4px;
 }
 
 .book-cat-select {
-  font-size: 12px;
-  padding: 3px 6px;
-  max-width: 135px;
+  width: 100%;
+  font-size: 10px;
+  padding: 2px 4px;
+  height: 23px;
   color: var(--stone);
   background: var(--void-soft);
   border: 1px solid var(--patina);
   border-radius: 3px;
   font-family: inherit;
+  box-sizing: border-box;
 }
 
 /* 视图模式 2：水墨存目列表 (Table) */
@@ -424,56 +434,56 @@
 
   /* 书籍网格与卡片 */
   .books-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+    gap: 8px;
   }
 
   .book-card {
-    border-radius: 5px;
+    border-radius: 4px;
   }
 
   .book-badges-top {
-    top: 6px;
-    left: 6px;
-    right: 6px;
+    top: 4px;
+    left: 4px;
+    right: 4px;
   }
 
   .badge-format, .badge-progress {
-    font-size: 10px;
-    padding: 1.5px 5px;
+    font-size: 9px;
+    padding: 1px 3.5px;
   }
 
   .book-body {
-    padding: 10px 10px 10px;
-    gap: 4px;
+    padding: 6px 6px 7px;
+    gap: 3px;
   }
 
   .book-title {
-    font-size: 13.5px;
-    line-height: 1.35;
+    font-size: 11.5px;
+    line-height: 1.3;
   }
 
   .book-meta {
-    font-size: 11.5px;
+    font-size: 10px;
   }
 
   .book-footer {
-    padding-top: 8px;
-    gap: 4px;
+    padding-top: 5px;
+    gap: 3px;
   }
 
   .book-cat-select {
-    flex: 1;
+    width: 100%;
     min-width: 0;
     max-width: none;
-    font-size: 11px;
-    padding: 3px 4px;
-    height: 26px;
+    font-size: 9.5px;
+    padding: 2px 3px;
+    height: 22px;
   }
 
   .btn-delete-book {
-    padding: 3px 6px;
-    font-size: 11px;
-    height: 26px;
+    padding: 2px 5px;
+    font-size: 10px;
+    height: 22px;
   }
 }

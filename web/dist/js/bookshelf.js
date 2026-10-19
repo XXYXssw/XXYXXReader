@@ -154,9 +154,9 @@ function renderGridView(container) {
                 <select class="book-cat-select" data-book-id="${escapeHTML(b.id)}" title="调整分卷归类">
                   ${buildCategoryOptionsHTML(b.category_id)}
                 </select>
-                <div style="display:flex;gap:4px;">
-                  <a class="btn" style="padding:3px 8px;font-size:12px;" href="${readerUrl}">开卷</a>
-                  <button class="btn btn-danger js-delete-book" style="padding:3px 7px;font-size:12px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="移除藏书">删</button>
+                <div class="book-footer-actions">
+                  <a class="btn" style="flex:1;padding:2px 4px;font-size:11px;text-align:center;" href="${readerUrl}">开卷</a>
+                  <button class="btn btn-danger js-delete-book" style="padding:2px 6px;font-size:11px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="移除藏书">删</button>
                 </div>
               </div>
             </div>

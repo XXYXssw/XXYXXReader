@@ -163,10 +163,17 @@
       <div class="setting-group" style="border-bottom:none;">
         <div class="setting-label"><span>墨水屏物理翻页键录制绑定</span></div>
         <p id="custom-keys-status" style="font-size:11.5px;color:var(--stone);margin:0 0 10px;line-height:1.45;"></p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
           <button id="btn-record-next" class="btn" style="flex:1;" type="button">录制「下页键」</button>
           <button id="btn-record-prev" class="btn" style="flex:1;" type="button">录制「上页键」</button>
           <button id="btn-reset-keys" class="btn" type="button">重置</button>
+        </div>
+        <div style="font-size:11px;color:var(--stone);margin-bottom:6px;">常用墨水屏物理键一键直绑：</div>
+        <div class="key-quick-chips" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn js-quick-key" data-target="next" data-key="VolumeDown" data-code="25" type="button" style="padding:3px 7px;font-size:11px;">下页: 音量减(25)</button>
+          <button class="btn js-quick-key" data-target="prev" data-key="VolumeUp" data-code="24" type="button" style="padding:3px 7px;font-size:11px;">上页: 音量加(24)</button>
+          <button class="btn js-quick-key" data-target="next" data-key="PageDown" data-code="93" type="button" style="padding:3px 7px;font-size:11px;">下页: PageDown(93)</button>
+          <button class="btn js-quick-key" data-target="prev" data-key="PageUp" data-code="92" type="button" style="padding:3px 7px;font-size:11px;">上页: PageUp(92)</button>
         </div>
       </div>
     </div>
@@ -203,6 +210,6 @@
     </div>
   </div>
 
-  <script type="module" src="/js/reader-app.js?v=2.0.2"></script>
+  <script type="module" src="/js/reader-app.js?v=2.0.5"></script>
 </body>
 </html>

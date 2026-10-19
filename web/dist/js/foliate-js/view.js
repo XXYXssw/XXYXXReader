@@ -438,7 +438,12 @@ export class FoliateView extends HTMLElement {
       this.dispatchEvent(new CustomEvent('reader-keydown', {
         detail: { key: e.key, keyCode: e.keyCode, originalEvent: e }
       }));
-    });
+    }, true);
+    doc.addEventListener('keyup', (e) => {
+      this.dispatchEvent(new CustomEvent('reader-keydown', {
+        detail: { key: e.key, keyCode: e.keyCode, originalEvent: e }
+      }));
+    }, true);
 
     // 2. 监听选词完成事件（触发四色印彩浮层，兼容移动端与桌面端）
     let selectionJustHappened = false;

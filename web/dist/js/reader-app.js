@@ -119,6 +119,20 @@ class ReaderApp {
     }
   }
 
+  _normalizeKey(key, keyCode) {
+    let k = key;
+    const c = Number(keyCode) || 0;
+    if (c === 25 || k === 'VolumeDown') return { key: 'VolumeDown', keyCode: 25 };
+    if (c === 24 || k === 'VolumeUp') return { key: 'VolumeUp', keyCode: 24 };
+    if (c === 93 || k === 'PageDown') return { key: 'PageDown', keyCode: 93 };
+    if (c === 92 || k === 'PageUp') return { key: 'PageUp', keyCode: 92 };
+    if (c === 39 || c === 22 || k === 'ArrowRight') return { key: 'ArrowRight', keyCode: c || 39 };
+    if (c === 37 || c === 21 || k === 'ArrowLeft') return { key: 'ArrowLeft', keyCode: c || 37 };
+    if (c === 32 || k === ' ' || k === 'Space') return { key: 'Space', keyCode: 32 };
+    if (!k || k === 'Unidentified') k = `Key#${c}`;
+    return { key: k, keyCode: c };
+  }
+
   _bindViewEvents() {
     // 1. 二维九宫格触控热区判定
     this.view.addEventListener('viewport-tap', (e) => {
@@ -172,7 +186,8 @@ class ReaderApp {
     });
 
     // 5. 键盘与墨水屏实体按键支持
-    const handleKey = (key, keyCode, origEvent) => {
+    const handleKey = (rawKey, rawCode, origEvent) => {
+      const { key, keyCode } = this._normalizeKey(rawKey, rawCode);
       if (this.recordingTarget) {
         if (origEvent) origEvent.preventDefault();
         this._recordKey(this.recordingTarget, key, keyCode);
@@ -183,12 +198,12 @@ class ReaderApp {
 
       const token = `${key}#${keyCode}`;
       const isNext = [
-        'ArrowRight', 'PageDown', 'VolumeDown', ' '
-      ].includes(key) || [93, 25].includes(keyCode) || this.customKeys.next.includes(token) || this.customKeys.next.includes(key);
+        'ArrowRight', 'PageDown', 'VolumeDown', 'Space'
+      ].includes(key) || [93, 25, 39, 22, 32].includes(keyCode) || this.customKeys.next.includes(token) || this.customKeys.next.includes(key);
 
       const isPrev = [
         'ArrowLeft', 'PageUp', 'VolumeUp'
-      ].includes(key) || [92, 24].includes(keyCode) || this.customKeys.prev.includes(token) || this.customKeys.prev.includes(key);
+      ].includes(key) || [92, 24, 37, 21].includes(keyCode) || this.customKeys.prev.includes(token) || this.customKeys.prev.includes(key);
 
       if (isNext) {
         if (origEvent) origEvent.preventDefault();
@@ -199,7 +214,14 @@ class ReaderApp {
       }
     };
 
-    window.addEventListener('keydown', (e) => handleKey(e.key, e.keyCode, e));
+    window.addEventListener('keydown', (e) => handleKey(e.key, e.keyCode, e), true);
+    document.addEventListener('keydown', (e) => handleKey(e.key, e.keyCode, e), true);
+    window.addEventListener('keyup', (e) => {
+      if (this.recordingTarget) handleKey(e.key, e.keyCode, e);
+    }, true);
+    document.addEventListener('keyup', (e) => {
+      if (this.recordingTarget) handleKey(e.key, e.keyCode, e);
+    }, true);
     this.view.addEventListener('reader-keydown', (e) => {
       handleKey(e.detail.key, e.detail.keyCode, e.detail.originalEvent);
     });
@@ -240,11 +262,21 @@ class ReaderApp {
     const leftDrawer = document.getElementById('drawer-left');
     const rightDrawer = document.getElementById('drawer-right');
 
+    const updateRecordButtons = () => {
+      const btnNext = document.getElementById('btn-record-next');
+      const btnPrev = document.getElementById('btn-record-prev');
+      if (btnNext) btnNext.textContent = this.recordingTarget === 'next' ? '⏳ 请按下按键…' : '录制「下页键」';
+      if (btnPrev) btnPrev.textContent = this.recordingTarget === 'prev' ? '⏳ 请按下按键…' : '录制「上页键」';
+    };
+
     const closeDrawers = () => {
       backdrop?.classList.remove('active');
       leftDrawer?.classList.remove('active');
       rightDrawer?.classList.remove('active');
-      this.recordingTarget = null;
+      if (this.recordingTarget) {
+        this.recordingTarget = null;
+        updateRecordButtons();
+      }
     };
 
     window.addEventListener('click', (e) => {
@@ -390,16 +422,28 @@ class ReaderApp {
     });
 
     // 墨水屏实体按键录制绑定
-    document.getElementById('btn-record-next')?.addEventListener('click', () => {
-      this.recordingTarget = 'next';
-      showToast('请按下您的墨水屏「下一页」物理按键…');
-    });
-    document.getElementById('btn-record-prev')?.addEventListener('click', () => {
-      this.recordingTarget = 'prev';
-      showToast('请按下您的墨水屏「上一页」物理按键…');
-    });
+    const startRecord = (target) => {
+      this.recordingTarget = target;
+      updateRecordButtons();
+      showToast(`请按下墨水屏「${target === 'next' ? '下一页' : '上一页'}」物理按键，或直接点选下方快捷键…`);
+    };
+
+    document.getElementById('btn-record-next')?.addEventListener('click', () => startRecord('next'));
+    document.getElementById('btn-record-prev')?.addEventListener('click', () => startRecord('prev'));
+
+    for (const btn of document.querySelectorAll('.js-quick-key')) {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-target');
+        const key = btn.getAttribute('data-key');
+        const code = Number(btn.getAttribute('data-code'));
+        this._recordKey(target, key, code);
+      });
+    }
+
     document.getElementById('btn-reset-keys')?.addEventListener('click', () => {
       this.customKeys = { next: [], prev: [] };
+      this.recordingTarget = null;
+      updateRecordButtons();
       this._saveCustomKeys();
       showToast('已恢复默认翻页键映射');
     });
@@ -415,12 +459,17 @@ class ReaderApp {
     });
   }
 
-  _recordKey(target, key, keyCode) {
+  _recordKey(target, rawKey, rawCode) {
+    const { key, keyCode } = this._normalizeKey(rawKey, rawCode);
     const token = `${key}#${keyCode}`;
     if (!this.customKeys[target].includes(token)) {
       this.customKeys[target].push(token);
     }
     this.recordingTarget = null;
+    const btnNext = document.getElementById('btn-record-next');
+    const btnPrev = document.getElementById('btn-record-prev');
+    if (btnNext) btnNext.textContent = '录制「下页键」';
+    if (btnPrev) btnPrev.textContent = '录制「上页键」';
     this._saveCustomKeys();
     showToast(`已成功绑定「${target === 'next' ? '下一页' : '上一页'}」实体键 (${key} / Code ${keyCode})`);
   }
