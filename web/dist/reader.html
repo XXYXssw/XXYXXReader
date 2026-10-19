@@ -54,7 +54,7 @@
       <div class="drawer-tabs">
         <button class="drawer-tab active" data-tab="toc" type="button">卷章目录</button>
         <button class="drawer-tab" data-tab="anns" type="button">朱批摘录</button>
-        <button class="drawer-tab" data-tab="obsidian" type="button">Obsidian 预览</button>
+        <button class="drawer-tab" data-tab="obsidian" type="button">笔记预览</button>
       </div>
       <button id="btn-close-left-drawer" class="btn" style="padding:4px 9px;" type="button">✕</button>
     </div>
@@ -140,13 +140,16 @@
         </div>
       </div>
 
-      <!-- 要素 4：版心边距 -->
+      <!-- 要素 4：版心留白（无级滑条自由控制留白） -->
       <div class="setting-group">
-        <div class="setting-label"><span>版心边距</span></div>
-        <div class="segmented-group">
-          <button class="seg-btn" data-set-margin="12" type="button">极窄 (12px)</button>
-          <button class="seg-btn" data-set-margin="28" type="button">适中 (28px)</button>
-          <button class="seg-btn" data-set-margin="48" type="button">宽裕 (48px)</button>
+        <div class="setting-label">
+          <span>版心留白</span>
+          <span id="margin-size-label">28px</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button id="btn-margin-dec" class="btn" style="padding:5px 12px;" type="button">狭</button>
+          <input id="margin-range" class="progress-range" type="range" min="0" max="140" step="2" value="28" />
+          <button id="btn-margin-inc" class="btn" style="padding:5px 12px;" type="button">阔</button>
         </div>
       </div>
 
@@ -190,7 +193,7 @@
       <button class="seal-btn" data-color="songyan" type="button"><span class="seal-dot songyan"></span>松烟</button>
       <button class="seal-btn" data-color="qiukui" type="button"><span class="seal-dot qiukui"></span>秋葵</button>
     </div>
-    <textarea id="annotator-note-input" class="annotator-textarea" placeholder="批注研读心得（保存后实时直写 Obsidian 笔记库）…"></textarea>
+    <textarea id="annotator-note-input" class="annotator-textarea" placeholder="批注研读心得（保存后实时直写笔记库）…"></textarea>
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <button id="btn-delete-annotation" class="btn btn-danger" style="padding:4px 10px;font-size:12px;display:none;" type="button">删除批注</button>
       <div style="display:flex;gap:8px;margin-left:auto;">
@@ -210,6 +213,6 @@
     </div>
   </div>
 
-  <script type="module" src="/js/reader-app.js?v=2.0.6"></script>
+  <script type="module" src="/js/reader-app.js?v=2.0.7"></script>
 </body>
 </html>

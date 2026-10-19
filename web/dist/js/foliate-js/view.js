@@ -249,7 +249,7 @@ export class FoliateView extends HTMLElement {
 
     const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
     const viewH = Math.max(300, this.iframe.clientHeight || window.innerHeight);
-    const padX = Number(this.settings.margin) || 28;
+    const padX = this.settings.margin !== undefined ? Math.max(0, Number(this.settings.margin)) : 28;
     const padY = 24;
     const colWidth = Math.max(160, viewW - padX * 2);
     const colGap = padX * 2;
@@ -277,8 +277,10 @@ export class FoliateView extends HTMLElement {
         overflow-y: auto !important;
       }
       #xxyxx-reader-root {
-        max-width: 820px;
-        margin: 0 auto;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
         padding: 32px ${padX}px 64px !important;
       }
       ` : `
@@ -313,13 +315,15 @@ export class FoliateView extends HTMLElement {
         line-height: ${this.settings.lineHeight} !important;
       }
 
-      /* 段落与块级子元素清空水平边距，严格在 colWidth 版心内自然排布，绝不嵌套叠加导致跨页丢字漂移 */
+      /* 穿透压制 EPUB 内置写死的最大宽度与自动外边距，彻底粉碎两边固定多余留白 */
+      #xxyxx-reader-root,
       #xxyxx-reader-root > *,
       #xxyxx-reader-root p,
       #xxyxx-reader-root div,
       #xxyxx-reader-root blockquote,
       #xxyxx-reader-root .content,
-      #xxyxx-reader-root [class*="content"] {
+      #xxyxx-reader-root [class*="content"],
+      #xxyxx-reader-root [class*="calibre"] {
         padding-left: 0 !important;
         padding-right: 0 !important;
         margin-left: 0 !important;
@@ -411,7 +415,7 @@ export class FoliateView extends HTMLElement {
 
     void root.offsetWidth; // 触发同步重排以获取最新的真实 scrollWidth
     const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
-    const padX = Number(this.settings.margin) || 28;
+    const padX = this.settings.margin !== undefined ? Math.max(0, Number(this.settings.margin)) : 28;
     const colWidth = Math.max(160, viewW - padX * 2);
     const colGap = padX * 2;
     const pitch = colWidth + colGap;

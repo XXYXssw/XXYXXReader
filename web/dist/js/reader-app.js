@@ -1,5 +1,5 @@
 // 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、墨水屏物理按键录制与进度同步
-import './foliate-js/view.js?v=2.0.6';
+import './foliate-js/view.js?v=2.0.7';
 import { ThemeManager, showToast } from './theme.js';
 import { AnnotatorController } from './annotator.js';
 
@@ -395,15 +395,16 @@ class ReaderApp {
       });
     }
 
-    // 4. 版心边距
-    for (const btn of document.querySelectorAll('[data-set-margin]')) {
-      btn.addEventListener('click', () => {
-        this.settings.margin = Number(btn.getAttribute('data-set-margin'));
-        this._saveSettings();
-        this.view.updateSettings(this.settings);
-        this._syncSettingsUI();
-      });
-    }
+    // 4. 版心留白微调 (0px ~ 140px 无级滑条，兼具 狭/阔 按钮)
+    const applyMargin = (m) => {
+      this.settings.margin = Math.max(0, Math.min(140, m));
+      this._saveSettings();
+      this.view.updateSettings(this.settings);
+      this._syncSettingsUI();
+    };
+    document.getElementById('btn-margin-dec')?.addEventListener('click', () => applyMargin(this.settings.margin - 4));
+    document.getElementById('btn-margin-inc')?.addEventListener('click', () => applyMargin(this.settings.margin + 4));
+    document.getElementById('margin-range')?.addEventListener('input', (e) => applyMargin(Number(e.target.value)));
 
     // 5. 段首缩进与两端对齐
     document.getElementById('btn-toggle-indent')?.addEventListener('click', () => {
@@ -497,9 +498,12 @@ class ReaderApp {
     for (const btn of document.querySelectorAll('[data-set-lh]')) {
       btn.classList.toggle('active', Number(btn.getAttribute('data-set-lh')) === this.settings.lineHeight);
     }
-    for (const btn of document.querySelectorAll('[data-set-margin]')) {
-      btn.classList.toggle('active', Number(btn.getAttribute('data-set-margin')) === this.settings.margin);
+    const marginLabel = document.getElementById('margin-size-label');
+    if (marginLabel) {
+      marginLabel.textContent = this.settings.margin === 0 ? '0px (满屏)' : `${this.settings.margin}px`;
     }
+    const marginRange = document.getElementById('margin-range');
+    if (marginRange) marginRange.value = this.settings.margin;
     document.getElementById('btn-toggle-indent')?.classList.toggle('active', this.settings.indent);
     document.getElementById('btn-toggle-justify')?.classList.toggle('active', this.settings.justify);
     this._renderCustomKeysHint();
