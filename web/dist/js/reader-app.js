@@ -1,5 +1,5 @@
 // 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、墨水屏物理按键录制与进度同步
-import './foliate-js/view.js?v=2.0.7';
+import './foliate-js/view.js?v=3.1.1';
 import { ThemeManager, showToast } from './theme.js';
 import { AnnotatorController } from './annotator.js';
 
@@ -171,18 +171,20 @@ class ReaderApp {
 
     // 4. 翻页进度变更与自动防抖落库
     this.view.addEventListener('relocate', (e) => {
-      const { page, totalPages, percent, cfi, chapterTitle, sectionIndex } = e.detail;
+      const { page = 1, totalPages = 1, percent = 0, cfi = '', chapterTitle = '', sectionIndex = 0 } = e.detail || {};
+      const numPercent = typeof percent === 'number' ? percent : (Number(percent) || 0);
+
       document.getElementById('topbar-chapter-title').textContent = chapterTitle || '';
       document.getElementById('status-chapter').textContent = chapterTitle || `第 ${sectionIndex + 1} 节`;
-      document.getElementById('status-page').textContent = `${page} / ${totalPages} · ${percent.toFixed(1)}%`;
+      document.getElementById('status-page').textContent = `${page} / ${totalPages} · ${numPercent.toFixed(1)}%`;
 
       const slider = document.getElementById('progress-slider');
       const label = document.getElementById('progress-percent-label');
-      if (slider) slider.value = percent;
-      if (label) label.textContent = `${percent.toFixed(1)}%`;
+      if (slider) slider.value = numPercent;
+      if (label) label.textContent = `${numPercent.toFixed(1)}%`;
 
       this._highlightActiveToc(sectionIndex);
-      this._debounceSaveProgress({ percent, cfi, label: chapterTitle });
+      this._debounceSaveProgress({ percent: numPercent, cfi, label: chapterTitle });
     });
 
     // 5. 键盘与墨水屏实体按键支持
@@ -395,9 +397,9 @@ class ReaderApp {
       });
     }
 
-    // 4. 版心留白微调 (0px ~ 140px 无级滑条，兼具 狭/阔 按钮)
+    // 4. 版心留白微调 (0px ~ 200px 无级滑条，兼具 狭/阔 按钮)
     const applyMargin = (m) => {
-      this.settings.margin = Math.max(0, Math.min(140, m));
+      this.settings.margin = Math.max(0, Math.min(200, m));
       this._saveSettings();
       this.view.updateSettings(this.settings);
       this._syncSettingsUI();
