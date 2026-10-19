@@ -151,9 +151,7 @@ function renderGridView(container) {
                   ${buildCategoryOptionsHTML(b.category_id)}
                 </select>
                 <div class="book-footer-actions">
-                  <a class="btn" style="flex:1;padding:2px 4px;font-size:11px;text-align:center;" href="${readerUrl}">开卷</a>
-                  <button class="btn js-export-notes" style="padding:2px 6px;font-size:11px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="导出划线笔记为 Obsidian 兼容 Markdown">笔记</button>
-                  <button class="btn btn-danger js-delete-book" style="padding:2px 6px;font-size:11px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="移除藏书">删</button>
+                  <button class="btn js-export-notes" style="flex:1;padding:2px 4px;font-size:11px;text-align:center;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="导出划线笔记为 Obsidian 兼容 Markdown">笔记</button>
                 </div>
               </div>
             </div>
@@ -198,11 +196,7 @@ function renderTableView(container) {
                 <td>${b.annotation_count || 0} 条</td>
                 <td>${formatDate(b.last_read_at)}</td>
                 <td>
-                  <div style="display:flex;gap:6px;">
-                    <a class="btn" style="padding:4px 10px;font-size:12px;" href="${readerUrl}">阅读</a>
-                    <button class="btn js-export-notes" style="padding:4px 8px;font-size:12px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="导出划线笔记为 Obsidian 兼容 Markdown">导出笔记</button>
-                    <button class="btn btn-danger js-delete-book" style="padding:4px 8px;font-size:12px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}">移除</button>
-                  </div>
+                  <button class="btn js-export-notes" style="padding:4px 10px;font-size:12px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="导出划线笔记为 Obsidian 兼容 Markdown">导出笔记</button>
                 </td>
               </tr>
             `;
@@ -239,21 +233,6 @@ function bindBookEvents(container) {
       const bookId = btn.getAttribute('data-book-id');
       const title = btn.getAttribute('data-book-title') || '书籍';
       exportBookNotes(bookId, title);
-    });
-  }
-
-  for (const btn of container.querySelectorAll('.js-delete-book')) {
-    btn.addEventListener('click', async () => {
-      const bookId = btn.getAttribute('data-book-id');
-      const title = btn.getAttribute('data-book-title');
-      if (!window.confirm(`确定要从书库移除《${title}》吗？`)) return;
-      try {
-        await fetchJSON(`/api/books/${encodeURIComponent(bookId)}`, { method: 'DELETE' });
-        showToast(`《${title}》已移除`);
-        loadShelfData();
-      } catch (err) {
-        showToast(`移除失败: ${err.message}`);
-      }
     });
   }
 }

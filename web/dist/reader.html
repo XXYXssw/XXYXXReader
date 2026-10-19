@@ -255,6 +255,18 @@
         </div>
 
         <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <label style="color:var(--stone);">对话文字大小（仅本设备生效）：</label>
+            <span id="ai-cfg-fontsize-label" style="color:var(--stone);">14px</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button id="btn-ai-font-dec" class="btn" style="padding:5px 12px;" type="button">A-</button>
+            <input id="ai-cfg-fontsize" class="progress-range" type="range" min="11" max="24" step="1" value="14" />
+            <button id="btn-ai-font-inc" class="btn" style="padding:5px 12px;" type="button">A+</button>
+          </div>
+        </div>
+
+        <div>
           <label style="display:block;color:var(--stone);margin-bottom:5px;">伴读系统提示词 (System Prompt)：</label>
           <textarea id="ai-cfg-prompt" class="annotator-textarea" style="min-height:84px;margin-bottom:0;" placeholder="设定伴读先生的角色、语气与解书原则…"></textarea>
         </div>

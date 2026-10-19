@@ -470,6 +470,40 @@ foliate-view {
   height: 100%;
 }
 
+/* AI 面板字号：由 localStorage 偏好驱动 --ai-font-size（默认 14px） */
+#quikchat-mount {
+  --ai-font-size: 14px;
+}
+
+#quikchat-mount .quikchat-base {
+  font-size: var(--ai-font-size) !important;
+}
+
+#quikchat-mount .quikchat-message-content,
+#quikchat-mount .ai-md-body,
+#quikchat-mount .ai-md-body p,
+#quikchat-mount .quikchat-input-textbox,
+#quikchat-mount .quikchat-input-send-btn {
+  font-size: var(--ai-font-size) !important;
+}
+
+#quikchat-mount .quikchat-user-label {
+  font-size: calc(var(--ai-font-size) - 2px) !important;
+}
+
+/* 引用块与工具折叠块跟随主字号等比缩放 */
+#quikchat-mount .ai-quote-badge,
+#quikchat-mount .ai-quote-jump-btn {
+  font-size: calc(var(--ai-font-size) - 3px) !important;
+}
+
+#quikchat-mount .ai-quote-body,
+#quikchat-mount .ai-tool-block-head,
+#quikchat-mount .ai-tool-block-row,
+#quikchat-mount .ai-tool-block-row code {
+  font-size: calc(var(--ai-font-size) - 2px) !important;
+}
+
 .quikchat-base {
   border-radius: 6px !important;
   border: 1px solid var(--crack) !important;

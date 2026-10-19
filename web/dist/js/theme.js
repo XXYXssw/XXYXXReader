@@ -31,7 +31,9 @@ export const LocalPrefs = {
     custom_keys: {
       next: [],
       prev: []
-    }
+    },
+    // AI 伴读面板的文字大小（仅本设备生效，纯 localStorage）
+    ai_font_size: 14
   },
 
   load() {
@@ -48,6 +50,7 @@ export const LocalPrefs = {
       } else {
         this._migrateLegacy();
       }
+      this.data.ai_font_size = this._clampAIFontSize(this.data.ai_font_size);
       // 无论是否发生迁移，旧版遗留键一律清除
       for (const k of Object.values(LEGACY_KEYS)) {
         localStorage.removeItem(k);
@@ -82,6 +85,22 @@ export const LocalPrefs = {
         localStorage.setItem(PREFS_KEY, JSON.stringify(this.data));
       }
     } catch (_) {}
+  },
+
+  _clampAIFontSize(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 14;
+    return Math.max(11, Math.min(24, Math.round(n)));
+  },
+
+  getAIFontSize() {
+    return this._clampAIFontSize(this.data.ai_font_size);
+  },
+
+  setAIFontSize(size) {
+    const v = this._clampAIFontSize(size);
+    this.save({ ai_font_size: v });
+    return v;
   },
 
   save(partial) {

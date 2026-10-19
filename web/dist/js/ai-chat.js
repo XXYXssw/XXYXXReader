@@ -1,7 +1,7 @@
 // AI 伴读模块：集成 QuikChat，支持特殊引用块（非大段明文复制）、多会话历史
 // 工具调用默认以可折叠块展示（无需任何开关按钮），AI 配置仅支持 OpenAI 兼容协议
 import quikchatMD from './vendor/quikchat-md.esm.min.js';
-import { SettingsStore, ThemeManager, showToast } from './theme.js';
+import { LocalPrefs, SettingsStore, ThemeManager, showToast } from './theme.js';
 
 const QUOTE_HEADER_RE = /^<!--XXYXX_QUOTE:([^\n]+?)-->\n?/;
 // 工具调用消息的折叠块标记前缀，用于把多行 tool 信息折叠为一块
@@ -25,7 +25,20 @@ export class AIChatController {
     this.chat = null;
 
     this._initQuikChat();
+    this._applyAIFontSize(LocalPrefs.getAIFontSize());
     this._bindControls();
+  }
+
+  // 应用 AI 面板字号（纯本地偏好，按设备隔离）
+  _applyAIFontSize(size) {
+    const px = LocalPrefs.setAIFontSize(size);
+    const mount = document.getElementById('quikchat-mount');
+    if (mount) mount.style.setProperty('--ai-font-size', `${px}px`);
+    const label = document.getElementById('ai-cfg-fontsize-label');
+    if (label) label.textContent = `${px}px`;
+    const range = document.getElementById('ai-cfg-fontsize');
+    if (range) range.value = px;
+    return px;
   }
 
   _getQuikChatTheme() {
@@ -216,6 +229,18 @@ export class AIChatController {
       }
     });
 
+    // AI 面板文字大小（localStorage，仅本设备生效）
+    const applyAIFont = (sz) => this._applyAIFontSize(sz);
+    document.getElementById('btn-ai-font-dec')?.addEventListener('click', () => {
+      applyAIFont(LocalPrefs.getAIFontSize() - 1);
+    });
+    document.getElementById('btn-ai-font-inc')?.addEventListener('click', () => {
+      applyAIFont(LocalPrefs.getAIFontSize() + 1);
+    });
+    document.getElementById('ai-cfg-fontsize')?.addEventListener('input', (e) => {
+      applyAIFont(Number(e.target.value));
+    });
+
     // 移除输入框上方挂载的特殊引用块
     document.getElementById('btn-ai-clear-quote')?.addEventListener('click', () => {
       this.clearAttachedQuote();
@@ -299,6 +324,13 @@ export class AIChatController {
     if (keyEl) keyEl.value = cfg.api_key || '';
     if (modelEl) modelEl.value = cfg.model || 'gpt-4o-mini';
     if (promptEl) promptEl.value = cfg.system_prompt || '';
+
+    // 字号来自本地偏好
+    const px = LocalPrefs.getAIFontSize();
+    const fsEl = document.getElementById('ai-cfg-fontsize');
+    const fsLabel = document.getElementById('ai-cfg-fontsize-label');
+    if (fsEl) fsEl.value = px;
+    if (fsLabel) fsLabel.textContent = `${px}px`;
   }
 
   async loadSessions(preferSessionId = '') {
