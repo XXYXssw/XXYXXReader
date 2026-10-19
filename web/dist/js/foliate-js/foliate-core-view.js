@@ -15,6 +15,22 @@ if (!Array.prototype.at) {
     return i < 0 ? this[this.length + i] : this[i];
   };
 }
+if (!Array.prototype.findLastIndex) {
+  Array.prototype.findLastIndex = function(predicate, thisArg) {
+    for (let i = this.length - 1; i >= 0; i--) {
+      if (predicate.call(thisArg, this[i], i, this)) return i;
+    }
+    return -1;
+  };
+}
+if (!Array.prototype.findLast) {
+  Array.prototype.findLast = function(predicate, thisArg) {
+    for (let i = this.length - 1; i >= 0; i--) {
+      if (predicate.call(thisArg, this[i], i, this)) return this[i];
+    }
+    return undefined;
+  };
+}
 
 import * as CFI from './epubcfi.js'
 import { TOCProgress, SectionProgress } from './progress.js'
@@ -67,10 +83,10 @@ const makeZipLoader = async file => {
       return { entries, loadText, loadBlob, getSize };
     } else {
       // 降级使用内置 rawInflate 解包引擎
-      const { ZipArchive } = await import('./zip-fallback.js');
+      const { ZipArchive } = await import('./zip-fallback.js?v=3.5.0');
       const ab = await file.arrayBuffer();
       const zip = new ZipArchive(ab);
-      const entries = Array.from(zip.entries.values()).map(e => ({ filename: e.filename }));
+      const entries = Array.from(zip.entries.values()).map(e => ({ filename: e.filename || e.fileName }));
       const loadText = async name => {
         if (!zip.has(name)) return null;
         return zip.extractText(name);
@@ -176,7 +192,6 @@ class CursorAutohider {
         this.#state = state
         if (this.#state.hidden) this.hide()
         this.#el.addEventListener('mousemove', ({ screenX, screenY }) => {
-            // check if it actually moved
             if (screenX === this.#state.x && screenY === this.#state.y) return
             this.#state.x = screenX, this.#state.y = screenY
             this.show()
@@ -298,7 +313,7 @@ export class View extends HTMLElement {
             await import('./fixed-layout.js')
             this.renderer = document.createElement('foliate-fxl')
         } else {
-            await import('./paginator.js')
+            await import('./paginator.js?v=3.5.0')
             this.renderer = document.createElement('foliate-paginator')
         }
         this.renderer.setAttribute('exportparts', 'head,foot,filter')
@@ -319,7 +334,7 @@ export class View extends HTMLElement {
                 this.renderer.goTo(resolved)
                     .then(() => {
                         const { doc } = this.renderer.getContents()
-                            .find(x => x.index = resolved.index)
+                            .find(x => x.index === resolved.index)
                         const el = resolved.anchor(doc)
                         el.classList.add(activeClass)
                         if (playbackActiveClass) el.ownerDocument
@@ -374,13 +389,12 @@ export class View extends HTMLElement {
         const tocItem = this.#tocProgress?.getProgress(index, range)
         const pageItem = this.#pageProgress?.getProgress(index, range)
         const cfi = this.getCFI(index, range)
-        this.lastLocation = { ...progress, tocItem, pageItem, cfi, range }
+        this.lastLocation = { ...progress, index, tocItem, pageItem, cfi, range }
         if (reason === 'snap' || reason === 'page' || reason === 'scroll')
             this.history.replaceState(cfi)
         this.#emit('relocate', this.lastLocation)
     }
     #onLoad({ doc, index }) {
-        // set language and dir if not already set
         doc.documentElement.lang ||= this.language.canonical ?? ''
         if (!this.language.isCJK)
             doc.documentElement.dir ||= this.language.direction ?? ''

@@ -140,15 +140,15 @@
         </div>
       </div>
 
-      <!-- 要素 4：版心留白（无级滑条自由控制留白） -->
+      <!-- 要素 4：版心留白（按单侧屏幕宽度比例 0% ~ 35% 无级调节） -->
       <div class="setting-group">
         <div class="setting-label">
-          <span>版心留白</span>
-          <span id="margin-size-label">28px</span>
+          <span>版心留白（单侧比例）</span>
+          <span id="margin-size-label">6%</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <button id="btn-margin-dec" class="btn" style="padding:5px 12px;" type="button">狭</button>
-          <input id="margin-range" class="progress-range" type="range" min="0" max="200" step="2" value="28" />
+          <input id="margin-range" class="progress-range" type="range" min="0" max="35" step="1" value="6" />
           <button id="btn-margin-inc" class="btn" style="padding:5px 12px;" type="button">阔</button>
         </div>
       </div>
@@ -213,6 +213,6 @@
     </div>
   </div>
 
-  <script type="module" src="/js/reader-app.js?v=3.3.2"></script>
+  <script type="module" src="/js/reader-app.js?v=3.5.0"></script>
 </body>
 </html>

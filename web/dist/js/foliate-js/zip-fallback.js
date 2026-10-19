@@ -215,6 +215,7 @@ export class ZipArchive {
 
       this.entries.set(fileName, {
         fileName,
+        filename: fileName,
         compressionMethod,
         compressedSize,
         uncompressedSize,

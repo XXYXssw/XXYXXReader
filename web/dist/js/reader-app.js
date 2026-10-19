@@ -1,5 +1,5 @@
 // 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、墨水屏物理按键录制与进度同步
-import './foliate-js/view.js?v=3.3.2';
+import './foliate-js/view.js?v=3.5.0';
 import { ThemeManager, showToast } from './theme.js';
 import { AnnotatorController } from './annotator.js';
 
@@ -16,6 +16,24 @@ function escapeHTML(str) {
   return div.innerHTML;
 }
 
+function flattenToc(items, depth = 0, out = []) {
+  if (!Array.isArray(items)) return out;
+  for (const item of items) {
+    if (!item) continue;
+    out.push({
+      id: item.id,
+      title: item.label || item.title || '未命名章节',
+      href: item.href || '',
+      sectionIndex: item.sectionIndex,
+      depth
+    });
+    if (Array.isArray(item.subitems) && item.subitems.length > 0) {
+      flattenToc(item.subitems, depth + 1, out);
+    }
+  }
+  return out;
+}
+
 class ReaderApp {
   constructor() {
     const params = new URLSearchParams(window.location.search);
@@ -25,6 +43,7 @@ class ReaderApp {
     this.view = document.getElementById('reader-view');
     this.barsVisible = false;
     this.progressTimer = null;
+    this.initialLoadDone = false;
 
     this.settings = this._loadSettings();
     this.customKeys = this._loadCustomKeys();
@@ -34,12 +53,21 @@ class ReaderApp {
   _loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem('xxyxx_reader_settings') || '{}');
+      // 平滑迁移旧版绝对像素 margin 到屏幕宽度百分比 (0% ~ 35%，默认 6%)
+      let marginPct = 6;
+      if (saved.marginUnit === 'percent' && saved.margin !== undefined) {
+        marginPct = Math.max(0, Math.min(35, Number(saved.margin)));
+      } else if (saved.margin !== undefined) {
+        const raw = Number(saved.margin);
+        marginPct = raw <= 35 ? Math.max(0, raw) : Math.min(35, Math.round((raw / 1200) * 100));
+      }
       return {
         flipMode: saved.flipMode || 'instant_tap',
         fontSize: Number(saved.fontSize) || 19,
         fontFamily: saved.fontFamily || 'serif',
         lineHeight: Number(saved.lineHeight) || 1.8,
-        margin: Number(saved.margin) || 28,
+        margin: marginPct,
+        marginUnit: 'percent',
         indent: saved.indent !== undefined ? Boolean(saved.indent) : true,
         justify: saved.justify !== undefined ? Boolean(saved.justify) : true
       };
@@ -49,7 +77,8 @@ class ReaderApp {
         fontSize: 19,
         fontFamily: 'serif',
         lineHeight: 1.8,
-        margin: 28,
+        margin: 6,
+        marginUnit: 'percent',
         indent: true,
         justify: true
       };
@@ -57,6 +86,7 @@ class ReaderApp {
   }
 
   _saveSettings() {
+    this.settings.marginUnit = 'percent';
     localStorage.setItem('xxyxx_reader_settings', JSON.stringify(this.settings));
   }
 
@@ -98,6 +128,9 @@ class ReaderApp {
       document.title = `《${this.bookMeta.title}》 · 阅境`;
       document.getElementById('topbar-book-title').textContent = `《${this.bookMeta.title}》`;
 
+      // 先加载该书已有的划线批注，确保章节首次渲染时即可立即挂载高亮
+      await this.annotator.loadAnnotations();
+
       // 拉取书籍字节流（MD/TXT 后端已自动转为虚拟 EPUB 缓存流）
       const contentRes = await fetch(`/api/books/${encodeURIComponent(this.bookId)}/content`);
       if (!contentRes.ok) throw new Error('拉取书籍内容失败');
@@ -109,11 +142,12 @@ class ReaderApp {
 
       this.view.updateSettings(this.settings);
       const bookInfo = await this.view.openBuffer(buffer, engineFormat);
-      this.toc = bookInfo.toc || [];
+      this.toc = flattenToc(bookInfo.toc || []);
       this._renderTocList();
 
-      await this.annotator.loadAnnotations();
       await this.view.goToCFI(this.bookMeta.progress_cfi, this.bookMeta.progress_percent);
+      this.view.renderAnnotationsInCurrentSection();
+      this.initialLoadDone = true;
     } catch (err) {
       showToast(`加载书籍出错: ${err.message}`);
     }
@@ -136,7 +170,6 @@ class ReaderApp {
   _bindViewEvents() {
     // 1. 二维九宫格触控热区判定
     this.view.addEventListener('viewport-tap', (e) => {
-      // 若当前笔记/批注界面正处于弹出状态，点击任意区域的首要行为是收起笔记浮层，绝不误触翻页或菜单！
       if (this.annotator && this.annotator.isActive()) {
         this.annotator.hidePopover();
         return;
@@ -171,7 +204,16 @@ class ReaderApp {
 
     // 4. 翻页进度变更与自动防抖落库
     this.view.addEventListener('relocate', (e) => {
-      const { page = 1, totalPages = 1, percent = 0, cfi = '', chapterTitle = '', sectionIndex = 0 } = e.detail || {};
+      const {
+        page = 1,
+        totalPages = 1,
+        percent = 0,
+        cfi = '',
+        chapterTitle = '',
+        tocHref = '',
+        tocId,
+        sectionIndex = 0
+      } = e.detail || {};
       const numPercent = typeof percent === 'number' ? percent : (Number(percent) || 0);
 
       document.getElementById('topbar-chapter-title').textContent = chapterTitle || '';
@@ -183,8 +225,10 @@ class ReaderApp {
       if (slider) slider.value = numPercent;
       if (label) label.textContent = `${numPercent.toFixed(1)}%`;
 
-      this._highlightActiveToc(sectionIndex);
-      this._debounceSaveProgress({ percent: numPercent, cfi, label: chapterTitle });
+      this._highlightActiveToc(sectionIndex, tocHref, tocId);
+      if (this.initialLoadDone) {
+        this._debounceSaveProgress({ percent: numPercent, cfi, label: chapterTitle });
+      }
     });
 
     // 5. 键盘与墨水屏实体按键支持
@@ -211,7 +255,6 @@ class ReaderApp {
       if (isNext || isPrev) {
         if (origEvent) origEvent.preventDefault();
         const now = Date.now();
-        // 280ms 严格翻页冷却保护：坚决杜绝物理按键连击或硬件 repeat 导致连续跳多页
         if (now - lastTurnTime < 280) {
           return;
         }
@@ -329,12 +372,16 @@ class ReaderApp {
 
     // 底部章节与进度条控制
     document.getElementById('btn-prev-chapter')?.addEventListener('click', () => {
-      if (this.view.currentSectionIndex > 0) {
+      if (this.view.renderer?.prevSection) {
+        this.view.renderer.prevSection();
+      } else if (this.view.currentSectionIndex > 0) {
         this.view.goToSection(this.view.currentSectionIndex - 1, 0);
       }
     });
     document.getElementById('btn-next-chapter')?.addEventListener('click', () => {
-      if (this.view.book && this.view.currentSectionIndex + 1 < this.view.book.sections.length) {
+      if (this.view.renderer?.nextSection) {
+        this.view.renderer.nextSection();
+      } else if (this.view.book && this.view.currentSectionIndex + 1 < this.view.book.sections.length) {
         this.view.goToSection(this.view.currentSectionIndex + 1, 0);
       }
     });
@@ -397,15 +444,15 @@ class ReaderApp {
       });
     }
 
-    // 4. 版心留白微调 (0px ~ 200px 无级滑条，兼具 狭/阔 按钮)
+    // 4. 版心留白比例微调 (单侧 0% ~ 35% 屏幕宽度比例，兼具 狭/阔 步进按钮)
     const applyMargin = (m) => {
-      this.settings.margin = Math.max(0, Math.min(200, m));
+      this.settings.margin = Math.max(0, Math.min(35, Math.round(Number(m) || 0)));
       this._saveSettings();
       this.view.updateSettings(this.settings);
       this._syncSettingsUI();
     };
-    document.getElementById('btn-margin-dec')?.addEventListener('click', () => applyMargin(this.settings.margin - 4));
-    document.getElementById('btn-margin-inc')?.addEventListener('click', () => applyMargin(this.settings.margin + 4));
+    document.getElementById('btn-margin-dec')?.addEventListener('click', () => applyMargin(this.settings.margin - 1));
+    document.getElementById('btn-margin-inc')?.addEventListener('click', () => applyMargin(this.settings.margin + 1));
     document.getElementById('margin-range')?.addEventListener('input', (e) => applyMargin(Number(e.target.value)));
 
     // 5. 段首缩进与两端对齐
@@ -502,7 +549,7 @@ class ReaderApp {
     }
     const marginLabel = document.getElementById('margin-size-label');
     if (marginLabel) {
-      marginLabel.textContent = this.settings.margin === 0 ? '0px (满屏)' : `${this.settings.margin}px`;
+      marginLabel.textContent = this.settings.margin === 0 ? '0% (满屏)' : `${this.settings.margin}%`;
     }
     const marginRange = document.getElementById('margin-range');
     if (marginRange) marginRange.value = this.settings.margin;
@@ -515,27 +562,42 @@ class ReaderApp {
     const listEl = document.getElementById('toc-list');
     if (!listEl) return;
     listEl.innerHTML = this.toc.map((item, idx) => `
-      <li class="toc-item" data-sec-idx="${item.sectionIndex ?? idx}">
+      <li class="toc-item"
+          data-sec-idx="${item.sectionIndex ?? idx}"
+          data-href="${escapeHTML(item.href || '')}"
+          data-toc-id="${item.id ?? idx}"
+          style="padding-left:${8 + (item.depth || 0) * 14}px;">
         <span>${escapeHTML(item.title)}</span>
-        <span style="font-size:12px;color:var(--stone);">#${(item.sectionIndex ?? idx) + 1}</span>
+        <span style="font-size:12px;color:var(--stone);">#${idx + 1}</span>
       </li>
     `).join('');
 
     for (const li of listEl.querySelectorAll('.toc-item')) {
       li.addEventListener('click', () => {
+        const href = li.getAttribute('data-href');
         const secIdx = Number(li.getAttribute('data-sec-idx'));
-        this.view.goToSection(secIdx, 0);
+        if (href) {
+          this.view.goTo(href);
+        } else {
+          this.view.goToSection(secIdx, 0);
+        }
         document.getElementById('drawer-backdrop')?.classList.remove('active');
         document.getElementById('drawer-left')?.classList.remove('active');
       });
     }
   }
 
-  _highlightActiveToc(sectionIndex) {
+  _highlightActiveToc(sectionIndex, tocHref = '', tocId = undefined) {
     const listEl = document.getElementById('toc-list');
     if (!listEl) return;
     for (const li of listEl.querySelectorAll('.toc-item')) {
-      li.classList.toggle('active', Number(li.getAttribute('data-sec-idx')) === sectionIndex);
+      const liId = li.getAttribute('data-toc-id');
+      const liHref = li.getAttribute('data-href');
+      const liSec = Number(li.getAttribute('data-sec-idx'));
+      const matched = (tocId !== undefined && String(tocId) === liId)
+        || (tocHref && liHref === tocHref)
+        || (!tocHref && tocId === undefined && liSec === sectionIndex);
+      li.classList.toggle('active', Boolean(matched));
     }
   }
 
