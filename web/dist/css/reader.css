@@ -14,7 +14,8 @@ html, body.reader-page {
   position: relative;
   z-index: 2;
   width: 100vw;
-  height: 100dvh;
+  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -113,6 +114,7 @@ html, body.reader-page {
   flex: 1;
   width: 100%;
   height: 100%;
+  min-height: 0;
   position: relative;
   overflow: hidden;
   display: flex;

@@ -1,7 +1,7 @@
 // Foliate-core <foliate-view> 统一流式阅读 Web Component
 // 支持：Shadow DOM + iframe 样式穿透、三模翻页(0ms瞬切/水平滑动/连续滚动)、四色印彩高亮图层、二维九宫格热区转发
-import { EPUBBook } from './epub.js';
-import { MOBIBook } from './mobi.js';
+import { EPUBBook } from './epub.js?v=2.0.1';
+import { MOBIBook } from './mobi.js?v=2.0.1';
 import { CFIEngine } from './cfi.js';
 import { ThemeManager } from '../theme.js';
 
@@ -53,10 +53,42 @@ export class FoliateView extends HTMLElement {
         }
       </style>
       <div class="stage">
-        <iframe id="chapter-frame" sandbox="allow-same-origin allow-scripts"></iframe>
+        <iframe id="chapter-frame"></iframe>
       </div>
     `;
     this.iframe = this.shadowRoot.getElementById('chapter-frame');
+
+    // 宿主元素手势后备（针对部分老旧 WebView iframe 丢事件的情况）
+    let hostStartX = null, hostStartY = null, hostStartTime = 0;
+    this.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        hostStartX = e.touches[0].clientX;
+        hostStartY = e.touches[0].clientY;
+        hostStartTime = Date.now();
+      }
+    }, { passive: true });
+    this.addEventListener('touchend', (e) => {
+      if (hostStartX === null || e.changedTouches.length === 0) return;
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const dx = endX - hostStartX;
+      const dy = endY - hostStartY;
+      const dt = Date.now() - hostStartTime;
+      hostStartX = null; hostStartY = null;
+
+      if (Math.abs(dx) > 38 && Math.abs(dx) > Math.abs(dy) * 1.3 && this.settings.flipMode !== 'continuous') {
+        if (dx < 0) this.next();
+        else this.prev();
+        return;
+      }
+      if (Math.abs(dx) < 18 && Math.abs(dy) < 18 && dt < 450) {
+        const viewW = this.clientWidth || window.innerWidth;
+        const viewH = this.clientHeight || window.innerHeight;
+        this.dispatchEvent(new CustomEvent('viewport-tap', {
+          detail: { xRatio: endX / viewW, yRatio: endY / viewH, originalEvent: e }
+        }));
+      }
+    }, { passive: true });
   }
 
   async openBuffer(arrayBuffer, fileType = 'epub') {
@@ -270,11 +302,12 @@ export class FoliateView extends HTMLElement {
       }
       #xxyxx-reader-root {
         box-sizing: border-box !important;
+        width: 100% !important;
         height: ${viewH - padY * 2}px !important;
         margin: ${padY}px 0 0 0 !important;
         padding: 0 !important;
-        column-width: ${colWidth}px !important;
-        column-gap: ${colGap}px !important;
+        column-width: ${viewW}px !important;
+        column-gap: 0 !important;
         column-fill: auto !important;
         transition: ${isEinkOrInstant ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)'} !important;
         will-change: transform;
@@ -291,6 +324,24 @@ export class FoliateView extends HTMLElement {
       #xxyxx-reader-root a {
         font-family: ${fontStack} !important;
         line-height: ${this.settings.lineHeight} !important;
+      }
+
+      /* 统一逐页版心边距：内容两侧留出精确的 padX 留白，栏间跨距精确对齐 viewW，杜绝跨页漂移露字 */
+      #xxyxx-reader-root > *,
+      #xxyxx-reader-root p,
+      #xxyxx-reader-root div,
+      #xxyxx-reader-root h1,
+      #xxyxx-reader-root h2,
+      #xxyxx-reader-root h3,
+      #xxyxx-reader-root h4,
+      #xxyxx-reader-root h5,
+      #xxyxx-reader-root h6,
+      #xxyxx-reader-root blockquote,
+      #xxyxx-reader-root .content,
+      #xxyxx-reader-root [class*="content"] {
+        padding-left: ${padX}px !important;
+        padding-right: ${padX}px !important;
+        box-sizing: border-box !important;
       }
 
       #xxyxx-reader-root h1,
@@ -314,8 +365,6 @@ export class FoliateView extends HTMLElement {
         margin-bottom: 0.55em !important;
         margin-left: 0 !important;
         margin-right: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
         text-indent: ${this.settings.indent ? '2em' : '0'} !important;
         text-align: ${this.settings.justify ? 'justify' : 'left'} !important;
       }
@@ -374,9 +423,8 @@ export class FoliateView extends HTMLElement {
 
     void root.offsetWidth; // 触发同步重排以获取最新的真实 scrollWidth
     const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
-    const padX = Number(this.settings.margin) || 28;
     const scrollW = Math.max(viewW, root.scrollWidth);
-    this.totalPagesInSection = Math.max(1, Math.round((scrollW + padX * 2) / viewW));
+    this.totalPagesInSection = Math.max(1, Math.round(scrollW / viewW));
     if (this.currentPage >= this.totalPagesInSection) {
       this.currentPage = this.totalPagesInSection - 1;
     }
@@ -397,8 +445,7 @@ export class FoliateView extends HTMLElement {
     root.style.transition = shouldAnimate ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none';
 
     const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
-    const padX = Number(this.settings.margin) || 28;
-    const offset = -this.currentPage * viewW + padX;
+    const offset = -this.currentPage * viewW;
     root.style.transform = `translate3d(${offset}px, 0, 0)`;
   }
 
@@ -466,30 +513,51 @@ export class FoliateView extends HTMLElement {
       setTimeout(handleSelectionEnd, 120);
     });
 
-    // 3. 左右滑动手势支持（选词状态下自动避让，防止误翻页）
+    // 3. 移动端滑动与点按 (Tap) 统一手势处理
     let touchStartX = null;
     let touchStartY = null;
+    let touchStartTime = 0;
+
     doc.addEventListener('touchstart', (e) => {
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
       }
     }, { passive: true });
 
     doc.addEventListener('touchend', (e) => {
       if (touchStartX === null || e.changedTouches.length === 0) return;
-      const dx = e.changedTouches[0].clientX - touchStartX;
-      const dy = e.changedTouches[0].clientY - touchStartY;
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const dx = endX - touchStartX;
+      const dy = endY - touchStartY;
+      const dt = Date.now() - touchStartTime;
       touchStartX = null;
       touchStartY = null;
 
-      // 如果当前正在选词或有选区，禁止滑动手势翻页
+      // 如果当前正在选词或有选区，避让翻页
       const sel = doc.getSelection();
       if (sel && !sel.isCollapsed && sel.toString().trim()) return;
 
-      if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5 && this.settings.flipMode !== 'continuous') {
+      // 滑动手势 (dx > 38px 触发上一页/下一页)
+      if (Math.abs(dx) > 38 && Math.abs(dx) > Math.abs(dy) * 1.3 && this.settings.flipMode !== 'continuous') {
         if (dx < 0) this.next();
         else this.prev();
+        return;
+      }
+
+      // 点按手势 (微小位移且用时短，直接触发九宫格热区判定)
+      if (Math.abs(dx) < 18 && Math.abs(dy) < 18 && dt < 450) {
+        const target = e.target;
+        if (target && target.closest && (target.closest('a[href]') || target.closest('mark.xxyxx-highlight'))) {
+          return;
+        }
+        const viewW = this.iframe.clientWidth || window.innerWidth;
+        const viewH = this.iframe.clientHeight || window.innerHeight;
+        this.dispatchEvent(new CustomEvent('viewport-tap', {
+          detail: { xRatio: endX / viewW, yRatio: endY / viewH, originalEvent: e }
+        }));
       }
     }, { passive: true });
 

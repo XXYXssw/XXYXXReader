@@ -97,6 +97,12 @@ func (s *Server) routes() {
 		if r.URL.Path == "/reader" {
 			r.URL.Path = "/reader.html"
 		}
+		// 禁用前端静态资源强缓存，确保移动端与墨水屏设备即时同步最新补丁
+		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".html") || strings.HasSuffix(r.URL.Path, ".css") {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+		}
 		fileServer.ServeHTTP(w, r)
 	})
 }
