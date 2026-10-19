@@ -350,6 +350,119 @@ foliate-view {
   -webkit-line-clamp: unset;
 }
 
+/* AI 工具调用折叠块（默认收起，点击头部展开参数与返回） */
+.ai-tool-block {
+  background: rgba(90, 99, 85, 0.08);
+  border: 1px solid var(--crack-light);
+  border-left: 3px solid var(--moss);
+  border-radius: 4px;
+  margin-bottom: 7px;
+  text-align: left;
+  overflow: hidden;
+}
+
+.ai-tool-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 9px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  font-size: 11.5px;
+  color: var(--moss);
+}
+
+.ai-tool-block-head:hover {
+  background: rgba(90, 99, 85, 0.10);
+}
+
+.ai-tool-block-title code {
+  font-size: 11px;
+  color: var(--ink);
+  background: var(--void-soft);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+.ai-tool-block-toggle {
+  font-size: 10.5px;
+  color: var(--stone);
+  white-space: nowrap;
+}
+
+.ai-tool-block.expanded .ai-tool-block-toggle::after {
+  content: '';
+}
+
+.ai-tool-block-body {
+  display: none;
+  padding: 6px 9px 8px;
+  border-top: 1px dashed var(--crack-light);
+}
+
+.ai-tool-block.expanded .ai-tool-block-body {
+  display: block;
+}
+
+.ai-tool-block.expanded .ai-tool-block-toggle {
+  font-size: 0;
+}
+
+.ai-tool-block.expanded .ai-tool-block-toggle::after {
+  content: '收起 ▴';
+  font-size: 10.5px;
+}
+
+.ai-tool-block-row {
+  display: flex;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin-bottom: 5px;
+}
+
+.ai-tool-block-row:last-child {
+  margin-bottom: 0;
+}
+
+.ai-tool-block-label {
+  flex: 0 0 30px;
+  color: var(--stone);
+}
+
+.ai-tool-block-row code {
+  flex: 1;
+  word-break: break-all;
+  white-space: pre-wrap;
+  color: var(--ink);
+  background: var(--void-soft);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 11px;
+}
+
+.ai-tool-block-out {
+  flex: 1;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--stone);
+  background: var(--void-soft);
+  padding: 4px 6px;
+  border-radius: 2px;
+}
+
+/* 工具调用消息气泡不再重复强调左侧色条，避免与折叠块叠加 */
+.quikchat-role-tool {
+  background: transparent !important;
+  border: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
 .quikchat-host {
   flex: 1;
   min-height: 0;
@@ -388,9 +501,10 @@ foliate-view {
 }
 
 .quikchat-role-tool {
-  background: rgba(90, 99, 85, 0.10) !important;
-  border-left: 3px solid var(--moss) !important;
-  font-size: 12px;
+  background: transparent !important;
+  border: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 .quikchat-user-label {

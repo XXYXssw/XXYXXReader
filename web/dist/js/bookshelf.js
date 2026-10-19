@@ -1,5 +1,6 @@
-// 宣纸书架与自定义分类双向管理前端逻辑（全服务端 SQLite 配置同步，零 localStorage）
-import { SettingsStore, ThemeManager, showToast } from './theme.js';
+// 宣纸书架与自定义分类双向管理前端逻辑
+// 用户偏好（主题 / 书架视图）存 localStorage，按设备隔离
+import { LocalPrefs, ThemeManager, showToast } from './theme.js';
 
 const state = {
   categories: [],
@@ -151,6 +152,7 @@ function renderGridView(container) {
                 </select>
                 <div class="book-footer-actions">
                   <a class="btn" style="flex:1;padding:2px 4px;font-size:11px;text-align:center;" href="${readerUrl}">开卷</a>
+                  <button class="btn js-export-notes" style="padding:2px 6px;font-size:11px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="导出划线笔记为 Obsidian 兼容 Markdown">笔记</button>
                   <button class="btn btn-danger js-delete-book" style="padding:2px 6px;font-size:11px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="移除藏书">删</button>
                 </div>
               </div>
@@ -198,6 +200,7 @@ function renderTableView(container) {
                 <td>
                   <div style="display:flex;gap:6px;">
                     <a class="btn" style="padding:4px 10px;font-size:12px;" href="${readerUrl}">阅读</a>
+                    <button class="btn js-export-notes" style="padding:4px 8px;font-size:12px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}" title="导出划线笔记为 Obsidian 兼容 Markdown">导出笔记</button>
                     <button class="btn btn-danger js-delete-book" style="padding:4px 8px;font-size:12px;" data-book-id="${escapeHTML(b.id)}" data-book-title="${escapeHTML(b.title)}">移除</button>
                   </div>
                 </td>
@@ -231,6 +234,14 @@ function bindBookEvents(container) {
     });
   }
 
+  for (const btn of container.querySelectorAll('.js-export-notes')) {
+    btn.addEventListener('click', () => {
+      const bookId = btn.getAttribute('data-book-id');
+      const title = btn.getAttribute('data-book-title') || '书籍';
+      exportBookNotes(bookId, title);
+    });
+  }
+
   for (const btn of container.querySelectorAll('.js-delete-book')) {
     btn.addEventListener('click', async () => {
       const bookId = btn.getAttribute('data-book-id');
@@ -247,6 +258,19 @@ function bindBookEvents(container) {
   }
 }
 
+// 导出单本书的划线笔记为 Obsidian 兼容的 Markdown 文件
+function exportBookNotes(bookId, title) {
+  const url = `/api/books/${encodeURIComponent(bookId)}/notes`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `《${title}》.md`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast(`《${title}》笔记已开始导出（Markdown）`);
+}
+
 function populateUploadCategories() {
   const sel = document.getElementById('upload-category-select');
   if (!sel) return;
@@ -257,9 +281,9 @@ function populateUploadCategories() {
 }
 
 async function initShelfApp() {
-  const settings = await SettingsStore.load();
-  state.viewMode = settings.shelf_view || 'grid';
-  ThemeManager.setTheme(settings.theme || 'rice-paper', false);
+  const prefs = LocalPrefs.load();
+  state.viewMode = prefs.shelf_view || 'grid';
+  ThemeManager.setTheme(prefs.theme || 'rice-paper', false);
 
   const themeSelect = document.getElementById('theme-select');
   if (themeSelect) {
@@ -299,7 +323,7 @@ async function initShelfApp() {
   if (viewToggleBtn) {
     viewToggleBtn.addEventListener('click', () => {
       state.viewMode = state.viewMode === 'grid' ? 'table' : 'grid';
-      SettingsStore.save({ shelf_view: state.viewMode });
+      LocalPrefs.save({ shelf_view: state.viewMode });
       updateViewBtnLabel();
       renderBooksView();
     });

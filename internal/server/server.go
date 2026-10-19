@@ -20,6 +20,7 @@ import (
 	"xxyxx-reader/internal/db"
 	"xxyxx-reader/internal/model"
 	"xxyxx-reader/internal/opds"
+	"xxyxx-reader/internal/obsidian"
 	"xxyxx-reader/internal/scanner"
 	"xxyxx-reader/web"
 )
@@ -377,6 +378,8 @@ func (s *Server) handleBookSubroutes(w http.ResponseWriter, r *http.Request) {
 		s.handleBookProgress(w, r, bookID)
 	case "annotations":
 		s.handleBookAnnotations(w, r, bookID)
+	case "notes":
+		s.handleBookNotesExport(w, r, bookID)
 	case "ai":
 		subAction := ""
 		if len(parts) > 2 {
@@ -670,6 +673,49 @@ func (s *Server) handleBookProgress(w http.ResponseWriter, r *http.Request, book
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "进度已更新"})
+}
+
+// handleBookNotesExport 导出指定书籍的全部划线批注为 Obsidian 兼容的 Markdown 文件
+// GET /api/books/{id}/notes            -> 以附件形式下载 .md
+// GET /api/books/{id}/notes?format=md  -> 同上
+// GET /api/books/{id}/notes?inline=1   -> 直接返回 text/markdown 文本（供预览或前端处理）
+func (s *Server) handleBookNotesExport(w http.ResponseWriter, r *http.Request, bookID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	b, err := s.store.GetBook(bookID)
+	if err != nil || b == nil {
+		writeError(w, http.StatusNotFound, "未找到该藏书")
+		return
+	}
+	anns, err := s.store.ListAnnotations(bookID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	md := obsidian.RenderMarkdown(b, anns, "")
+
+	if r.URL.Query().Get("inline") == "1" {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write([]byte(md))
+		return
+	}
+
+	fileName := fmt.Sprintf("《%s》.md", obsidian.SanitizeNoteFileName(b.Title))
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", contentDispositionAttachment(fileName))
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write([]byte(md))
+}
+
+// contentDispositionAttachment 构造兼容非 ASCII 文件名的下载头（RFC 5987）
+func contentDispositionAttachment(fileName string) string {
+	escaped := url.PathEscape(fileName)
+	return fmt.Sprintf("attachment; filename=\"notes.md\"; filename*=UTF-8''%s", escaped)
 }
 
 func (s *Server) handleBookAnnotations(w http.ResponseWriter, r *http.Request, bookID string) {

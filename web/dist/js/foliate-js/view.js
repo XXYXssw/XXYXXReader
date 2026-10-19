@@ -1,6 +1,6 @@
 // Foliate-core 工业级流式排版阅读引擎（基于 johnfactotum/foliate-js 原版核心）
 // 支持：Paginator 视口百分比留白架构、全格式 (EPUB 2/3, MOBI, KF8/AZW3)、跨节点鲁棒高亮与防误触选词
-import { View } from './foliate-core-view.js?v=3.6.0';
+import { View } from './foliate-core-view.js?v=3.7.0';
 import { ThemeManager } from '../theme.js';
 
 export class FoliateView extends View {

@@ -1,6 +1,7 @@
-// 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、AI 伴读与全服务端 SQLite 状态同步（零 localStorage）
-import './foliate-js/view.js?v=3.6.0';
-import { SettingsStore, ThemeManager, showToast } from './theme.js';
+// 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、AI 伴读
+// 用户偏好（翻页/字号/字体/行距/留白/主题/物理键）全量存 localStorage，按设备隔离
+import './foliate-js/view.js?v=3.7.0';
+import { LocalPrefs, ThemeManager, showToast } from './theme.js';
 import { AnnotatorController } from './annotator.js';
 import { AIChatController } from './ai-chat.js';
 
@@ -61,8 +62,8 @@ class ReaderApp {
     this.aiChat = null;
   }
 
-  _applyLoadedSettings(remoteData) {
-    const saved = remoteData?.reader_settings || {};
+  _applyLoadedSettings(prefsData) {
+    const saved = prefsData?.reader_settings || {};
     let marginPct = 6;
     if (saved.marginUnit === 'percent' && saved.margin !== undefined) {
       marginPct = Math.max(0, Math.min(35, Number(saved.margin)));
@@ -81,7 +82,7 @@ class ReaderApp {
       justify: saved.justify !== undefined ? Boolean(saved.justify) : true
     };
 
-    const ck = remoteData?.custom_keys || {};
+    const ck = prefsData?.custom_keys || {};
     this.customKeys = {
       next: Array.isArray(ck.next) ? ck.next : [],
       prev: Array.isArray(ck.prev) ? ck.prev : []
@@ -90,18 +91,18 @@ class ReaderApp {
 
   _saveSettings() {
     this.settings.marginUnit = 'percent';
-    SettingsStore.save({ reader_settings: this.settings });
+    LocalPrefs.save({ reader_settings: this.settings });
   }
 
   _saveCustomKeys() {
-    SettingsStore.save({ custom_keys: this.customKeys });
+    LocalPrefs.save({ custom_keys: this.customKeys });
     this._renderCustomKeysHint();
   }
 
   async init() {
-    const allSettings = await SettingsStore.load();
-    ThemeManager.setTheme(allSettings.theme || 'rice-paper', false);
-    this._applyLoadedSettings(allSettings);
+    const prefs = LocalPrefs.load();
+    ThemeManager.setTheme(prefs.theme || 'rice-paper', false);
+    this._applyLoadedSettings(prefs);
 
     if (!this.bookId) {
       showToast('缺少书籍 ID，正在返回书架');

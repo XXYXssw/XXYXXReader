@@ -174,7 +174,9 @@ const DefaultAISystemPrompt = `你是「阅境」书斋的博学伴读先生。�
 2. 若读者询问全书结构、某章节内容或跨章对比，请调用 get_book_toc 或 get_chapter_text 工具核实原文；
 3. 请以温润雅致、条理清晰的中文作答，紧扣原书文本，切勿凭空臆造。`
 
-// GetAllSettings 获取服务端保存的全部前端与 AI 配置
+// GetAllSettings 获取服务端保存的配置。
+// 服务端只承载 AI 配置（api_url / api_key / model / system_prompt），
+// 排版偏好、主题、书架视图、物理按键等一律由前端 localStorage 按设备自管。
 func (s *Store) GetAllSettings() (map[string]any, error) {
 	rows, err := s.db.Query(`SELECT key, value FROM app_settings`)
 	if err != nil {
@@ -183,28 +185,11 @@ func (s *Store) GetAllSettings() (map[string]any, error) {
 	defer rows.Close()
 
 	result := map[string]any{
-		"theme":      "rice-paper",
-		"shelf_view": "grid",
-		"reader_settings": map[string]any{
-			"flipMode":   "instant_tap",
-			"fontSize":   19,
-			"fontFamily": "serif",
-			"lineHeight": 1.8,
-			"margin":     6,
-			"marginUnit": "percent",
-			"indent":     true,
-			"justify":    true,
-		},
-		"custom_keys": map[string]any{
-			"next": []string{},
-			"prev": []string{},
-		},
 		"ai_config": model.AIConfig{
-			APIURL:               "https://api.openai.com/v1",
-			APIKey:               "",
-			Model:                "gpt-4o-mini",
-			SystemPrompt:         DefaultAISystemPrompt,
-			DefaultContextLength: 1200,
+			APIURL:       "https://api.openai.com/v1",
+			APIKey:       "",
+			Model:        "gpt-4o-mini",
+			SystemPrompt: DefaultAISystemPrompt,
 		},
 	}
 
@@ -213,17 +198,39 @@ func (s *Store) GetAllSettings() (map[string]any, error) {
 		if err := rows.Scan(&k, &v); err != nil {
 			continue
 		}
+		// 仅暴露 AI 配置；历史遗留的 reader_settings / custom_keys / theme 等
+		// 服务端副本不再下发，避免与各设备的本地偏好互相污染。
+		if k != "ai_config" {
+			continue
+		}
 		var parsed any
 		if err := json.Unmarshal([]byte(v), &parsed); err == nil {
+			if k == "ai_config" {
+				// 用结构体归一化，自动丢弃历史遗留字段（如 default_context_length）
+				cfg := model.AIConfig{}
+				if err := json.Unmarshal([]byte(v), &cfg); err == nil {
+					if strings.TrimSpace(cfg.APIURL) == "" {
+						cfg.APIURL = "https://api.openai.com/v1"
+					}
+					if strings.TrimSpace(cfg.Model) == "" {
+						cfg.Model = "gpt-4o-mini"
+					}
+					if strings.TrimSpace(cfg.SystemPrompt) == "" {
+						cfg.SystemPrompt = DefaultAISystemPrompt
+					}
+					result[k] = cfg
+				}
+				continue
+			}
 			result[k] = parsed
-		} else {
-			result[k] = v
 		}
 	}
 	return result, rows.Err()
 }
 
-// SaveSettings 批量保存配置项至 app_settings 表
+// SaveSettings 保存配置项至 app_settings 表。
+// 目前只接受 ai_config（AI 伴读配置）；排版偏好等设备级设置由前端 localStorage 负责，
+// 传其它键将被忽略，以免服务端与各设备的本地偏好互相覆盖。
 func (s *Store) SaveSettings(updates map[string]any) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -234,7 +241,7 @@ func (s *Store) SaveSettings(updates map[string]any) error {
 	now := time.Now()
 	for k, v := range updates {
 		k = strings.TrimSpace(k)
-		if k == "" {
+		if k != "ai_config" {
 			continue
 		}
 		b, err := json.Marshal(v)
@@ -256,11 +263,10 @@ ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.upd
 // GetAIConfig 读取当前 AI 配置
 func (s *Store) GetAIConfig() (model.AIConfig, error) {
 	cfg := model.AIConfig{
-		APIURL:               "https://api.openai.com/v1",
-		APIKey:               "",
-		Model:                "gpt-4o-mini",
-		SystemPrompt:         DefaultAISystemPrompt,
-		DefaultContextLength: 1200,
+		APIURL:       "https://api.openai.com/v1",
+		APIKey:       "",
+		Model:        "gpt-4o-mini",
+		SystemPrompt: DefaultAISystemPrompt,
 	}
 	var raw string
 	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'ai_config'`).Scan(&raw)
@@ -275,9 +281,6 @@ func (s *Store) GetAIConfig() (model.AIConfig, error) {
 	}
 	if strings.TrimSpace(cfg.SystemPrompt) == "" {
 		cfg.SystemPrompt = DefaultAISystemPrompt
-	}
-	if cfg.DefaultContextLength <= 0 {
-		cfg.DefaultContextLength = 1200
 	}
 	return cfg, nil
 }

@@ -1,8 +1,11 @@
-// AI 伴读模块：集成 QuikChat，支持特殊引用块（非大段明文复制）、多会话历史、工具轨迹开关与服务端 AI 配置
+// AI 伴读模块：集成 QuikChat，支持特殊引用块（非大段明文复制）、多会话历史
+// 工具调用默认以可折叠块展示（无需任何开关按钮），AI 配置仅支持 OpenAI 兼容协议
 import quikchatMD from './vendor/quikchat-md.esm.min.js';
 import { SettingsStore, ThemeManager, showToast } from './theme.js';
 
 const QUOTE_HEADER_RE = /^<!--XXYXX_QUOTE:([^\n]+?)-->\n?/;
+// 工具调用消息的折叠块标记前缀，用于把多行 tool 信息折叠为一块
+const TOOL_BLOCK_RE = /^<!--XXYXX_TOOL:([^\n]+?)-->\n?/;
 
 function escapeHTML(str) {
   const div = document.createElement('div');
@@ -18,7 +21,6 @@ export class AIChatController {
     this.sessions = [];
     this.activeSessionId = '';
     this.pendingQuote = null;
-    this.showToolCalls = false;
     this.isSending = false;
     this.chat = null;
 
@@ -55,10 +57,11 @@ export class AIChatController {
     this.chat.inputAreaSetButtonText('问书');
     const tb = mountEl.querySelector('.quikchat-input-textbox');
     if (tb) {
-      tb.setAttribute('placeholder', '输入问题与 AI 探讨本书（Shift+Enter 换行，附带引用时可直接发送）…');
+      tb.setAttribute('placeholder', '');
+      tb.removeAttribute('placeholder');
     }
 
-    // 委托点击聊天记录中的特殊引用块（支持展开/收起全文或跳回原文位置）
+    // 委托点击：工具折叠块展开/收起、引用块展开、引用定位跳转
     mountEl.addEventListener('click', (e) => {
       const jumpBtn = e.target.closest('.js-quote-jump');
       if (jumpBtn) {
@@ -68,6 +71,13 @@ export class AIChatController {
         if (cfi && this.onJumpToCFI) {
           this.onJumpToCFI(cfi);
         }
+        return;
+      }
+      const toolHead = e.target.closest('.ai-tool-block-head');
+      if (toolHead) {
+        e.preventDefault();
+        e.stopPropagation();
+        toolHead.closest('.ai-tool-block')?.classList.toggle('expanded');
         return;
       }
       const quoteBlock = e.target.closest('.ai-special-quote-block');
@@ -88,6 +98,16 @@ export class AIChatController {
     let text = String(rawContent || '');
     let quoteHTML = '';
 
+    // 工具调用折叠块（默认收起，点击头部展开）
+    const tm = text.match(TOOL_BLOCK_RE);
+    if (tm) {
+      text = text.slice(tm[0].length);
+      try {
+        const info = JSON.parse(decodeURIComponent(tm[1]));
+        quoteHTML += this._renderToolBlock(info);
+      } catch (_) {}
+    }
+
     const m = text.match(QUOTE_HEADER_RE);
     if (m) {
       text = text.slice(m[0].length);
@@ -99,7 +119,7 @@ export class AIChatController {
           const jumpLink = q.cfi
             ? `<button type="button" class="ai-quote-jump-btn js-quote-jump" data-cfi="${escapeHTML(q.cfi)}">定位原文 ↗</button>`
             : '';
-          quoteHTML = `
+          quoteHTML += `
             <div class="ai-special-quote-block" title="点击展开或收起引用原文">
               <div class="ai-quote-header">
                 <span class="ai-quote-badge">✦ 原文引用 · ${escapeHTML(chap)} (${charLen}字)</span>
@@ -114,6 +134,34 @@ export class AIChatController {
 
     const mdHTML = quikchatMD.quikdown ? quikchatMD.quikdown(text) : escapeHTML(text);
     return quoteHTML + `<div class="ai-md-body">${mdHTML}</div>`;
+  }
+
+  // 工具调用折叠块：头部一行摘要，点击展开参数与返回内容
+  _renderToolBlock({ name = 'tool', args = '{}', summary = '' } = {}) {
+    const safeName = escapeHTML(name);
+    return `
+      <div class="ai-tool-block">
+        <div class="ai-tool-block-head">
+          <span class="ai-tool-block-title">⚙ 工具调用 · <code>${safeName}</code></span>
+          <span class="ai-tool-block-toggle">展开 ▾</span>
+        </div>
+        <div class="ai-tool-block-body">
+          <div class="ai-tool-block-row"><span class="ai-tool-block-label">参数</span><code>${escapeHTML(args)}</code></div>
+          <div class="ai-tool-block-row"><span class="ai-tool-block-label">返回</span><div class="ai-tool-block-out">${escapeHTML(summary)}</div></div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 把一条工具调用消息编码为可折叠块（存入会话历史时仍保留原始工具名/参数）
+  _encodeToolMessage(toolName, toolArgs, content) {
+    const summary = String(content || '');
+    const encoded = encodeURIComponent(JSON.stringify({
+      name: toolName || 'tool',
+      args: toolArgs || '{}',
+      summary: summary.length > 1200 ? summary.slice(0, 1200) + '…' : summary
+    }));
+    return `<!--XXYXX_TOOL:${encoded}-->`;
   }
 
   _encodeContentWithQuote(text, quote) {
@@ -168,16 +216,6 @@ export class AIChatController {
       }
     });
 
-    // 切换显示/隐藏 AI 工具调用轨迹
-    const toolBtn = document.getElementById('btn-ai-toggle-tools');
-    toolBtn?.addEventListener('click', () => {
-      this.showToolCalls = !this.showToolCalls;
-      toolBtn.classList.toggle('active', this.showToolCalls);
-      if (this.chat) {
-        this.chat.messageSetVisibleByTag('tool-call', this.showToolCalls);
-      }
-    });
-
     // 移除输入框上方挂载的特殊引用块
     document.getElementById('btn-ai-clear-quote')?.addEventListener('click', () => {
       this.clearAttachedQuote();
@@ -197,18 +235,6 @@ export class AIChatController {
     document.getElementById('btn-cancel-ai-config')?.addEventListener('click', () => {
       configModal?.classList.remove('active');
     });
-
-    // 快速填入常用 API 地址预设
-    for (const presetBtn of document.querySelectorAll('.js-ai-preset')) {
-      presetBtn.addEventListener('click', () => {
-        const url = presetBtn.getAttribute('data-url');
-        const model = presetBtn.getAttribute('data-model');
-        const urlInput = document.getElementById('ai-cfg-url');
-        const modelInput = document.getElementById('ai-cfg-model');
-        if (urlInput && url) urlInput.value = url;
-        if (modelInput && model) modelInput.value = model;
-      });
-    }
 
     // 拉取远程可用模型列表
     const fetchModelsBtn = document.getElementById('btn-ai-fetch-models');
@@ -248,18 +274,17 @@ export class AIChatController {
       }
     });
 
-    // 保存 AI 配置到服务端 SQLite
+    // 保存 AI 配置到服务端 SQLite（仅 OpenAI 兼容协议）
     document.getElementById('btn-save-ai-config')?.addEventListener('click', async () => {
       const aiConfig = {
         api_url: document.getElementById('ai-cfg-url')?.value.trim() || 'https://api.openai.com/v1',
         api_key: document.getElementById('ai-cfg-key')?.value.trim() || '',
         model: document.getElementById('ai-cfg-model')?.value.trim() || 'gpt-4o-mini',
-        default_context_length: Math.max(100, Math.min(8000, Number(document.getElementById('ai-cfg-ctx-len')?.value) || 1200)),
         system_prompt: document.getElementById('ai-cfg-prompt')?.value.trim() || ''
       };
       await SettingsStore.save({ ai_config: aiConfig });
       configModal?.classList.remove('active');
-      showToast('AI 伴读配置已保存至服务端数据库');
+      showToast('AI 伴读配置已保存');
     });
   }
 
@@ -269,12 +294,10 @@ export class AIChatController {
     const urlEl = document.getElementById('ai-cfg-url');
     const keyEl = document.getElementById('ai-cfg-key');
     const modelEl = document.getElementById('ai-cfg-model');
-    const ctxEl = document.getElementById('ai-cfg-ctx-len');
     const promptEl = document.getElementById('ai-cfg-prompt');
     if (urlEl) urlEl.value = cfg.api_url || 'https://api.openai.com/v1';
     if (keyEl) keyEl.value = cfg.api_key || '';
     if (modelEl) modelEl.value = cfg.model || 'gpt-4o-mini';
-    if (ctxEl) ctxEl.value = cfg.default_context_length || 1200;
     if (promptEl) promptEl.value = cfg.system_prompt || '';
   }
 
@@ -315,12 +338,6 @@ export class AIChatController {
       const messages = await res.json();
 
       if (messages.length === 0) {
-        this.chat.messageAddFull({
-          content: '展卷有益。你可以直接向我提问书中内容，或在正文中选词点击 **「✦ 问 AI」** 附上原文引用块来深入探讨。',
-          userString: '伴读先生',
-          align: 'left',
-          role: 'assistant'
-        });
         return;
       }
 
@@ -333,14 +350,11 @@ export class AIChatController {
             role: 'user'
           });
         } else if (m.role === 'tool') {
-          const toolInfo = `**调用工具**: \`${m.tool_name || 'tool'}\`\n**参数**: \`${m.tool_arguments || '{}'}\`\n**返回摘要**: \`${String(m.content || '').slice(0, 260)}…\``;
           this.chat.messageAddFull({
-            content: toolInfo,
-            userString: `🔧 工具 · ${m.tool_name || 'tool'}`,
+            content: this._encodeToolMessage(m.tool_name, m.tool_arguments, m.content),
+            userString: `⚙ ${m.tool_name || 'tool'}`,
             align: 'left',
-            role: 'tool',
-            visible: this.showToolCalls,
-            tags: ['tool-call']
+            role: 'tool'
           });
         } else if (m.role === 'assistant') {
           this.chat.messageAddFull({
@@ -439,14 +453,11 @@ export class AIChatController {
 
       if (Array.isArray(data.tool_messages)) {
         for (const tm of data.tool_messages) {
-          const toolInfo = `**调用工具**: \`${tm.tool_name || 'tool'}\`\n**参数**: \`${tm.tool_arguments || '{}'}\`\n**返回摘要**: \`${String(tm.content || '').slice(0, 260)}…\``;
           this.chat.messageAddFull({
-            content: toolInfo,
-            userString: `🔧 工具 · ${tm.tool_name || 'tool'}`,
+            content: this._encodeToolMessage(tm.tool_name, tm.tool_arguments, tm.content),
+            userString: `⚙ ${tm.tool_name || 'tool'}`,
             align: 'left',
-            role: 'tool',
-            visible: this.showToolCalls,
-            tags: ['tool-call']
+            role: 'tool'
           });
         }
       }

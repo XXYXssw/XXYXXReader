@@ -35,12 +35,13 @@ func NewService(cfg *config.Config, store *db.Store) *Service {
 }
 
 // ChatRequest 前端发起 AI 对话的请求载荷
+// 划线上下文长度不再由用户配置，完全交给 AI 在工具调用时自行决定
+// （get_selection_context 的 length 参数）
 type ChatRequest struct {
-	SessionID          string           `json:"session_id"`
-	Message            string           `json:"message"`
-	Quote              *model.QuoteMeta `json:"quote,omitempty"`
-	CurrentChapterIdx  int              `json:"current_chapter_index"`
-	ContextLengthParam int              `json:"context_length,omitempty"`
+	SessionID         string           `json:"session_id"`
+	Message           string           `json:"message"`
+	Quote             *model.QuoteMeta `json:"quote,omitempty"`
+	CurrentChapterIdx int              `json:"current_chapter_index"`
 }
 
 // ChatResponse 返回给前端的本轮对话结果（含用户消息、工具调用记录与 AI 回复）
@@ -51,33 +52,32 @@ type ChatResponse struct {
 	AssistantMessage *model.AIMessage  `json:"assistant_message"`
 }
 
+// 本服务只对接 OpenAI 兼容协议（OpenAI / Azure OpenAI / 任何 OpenAI 兼容端点）
+const defaultOpenAIBaseURL = "https://api.openai.com/v1"
+
+// normalizeChatEndpoint 仅按 OpenAI 协议拼接 /chat/completions
 func normalizeChatEndpoint(apiURL string) string {
 	u := strings.TrimSpace(strings.TrimRight(apiURL, "/"))
 	if u == "" {
-		u = "https://api.openai.com/v1"
+		u = defaultOpenAIBaseURL
 	}
 	if strings.HasSuffix(u, "/chat/completions") {
 		return u
 	}
-	if strings.HasSuffix(u, "/v1") || strings.HasSuffix(u, "/v1beta") || strings.HasSuffix(u, "/api/v3") {
-		return u + "/chat/completions"
-	}
-	return u + "/v1/chat/completions"
+	return u + "/chat/completions"
 }
 
+// normalizeModelsEndpoint 仅按 OpenAI 协议拼接 /models
 func normalizeModelsEndpoint(apiURL string) string {
 	u := strings.TrimSpace(strings.TrimRight(apiURL, "/"))
 	if u == "" {
-		u = "https://api.openai.com/v1"
+		u = defaultOpenAIBaseURL
 	}
 	u = strings.TrimSuffix(u, "/chat/completions")
 	if strings.HasSuffix(u, "/models") {
 		return u
 	}
-	if strings.HasSuffix(u, "/v1") || strings.HasSuffix(u, "/v1beta") || strings.HasSuffix(u, "/api/v3") {
-		return u + "/models"
-	}
-	return u + "/v1/models"
+	return u + "/models"
 }
 
 // ListModels 从配置的 OpenAI 兼容端点拉取可用模型列表
@@ -173,6 +173,10 @@ type oaChatResponse struct {
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
 }
+
+// defaultSelectionContextLength 是 AI 未显式传入 length 时 get_selection_context 的兜底长度，
+// 不再暴露为任何用户设置项
+const defaultSelectionContextLength = 1200
 
 func buildTools(defaultCtxLen int) []oaTool {
 	return []oaTool{
@@ -271,10 +275,9 @@ func (s *Service) Chat(ctx context.Context, bookID string, req ChatRequest) (*Ch
 		return nil, fmt.Errorf("尚未配置 AI API Key，请点击 AI 伴读面板右上角「设置」填写 API 地址、Key 与模型")
 	}
 
-	defaultCtxLen := aiCfg.DefaultContextLength
-	if req.ContextLengthParam >= 100 && req.ContextLengthParam <= 8000 {
-		defaultCtxLen = req.ContextLengthParam
-	}
+	// 划线上下文长度完全交由 AI 通过 get_selection_context 的 length 参数决定，
+	// 用户侧不再提供该项设置；此处仅作为 AI 未显式传参时的兜底默认值。
+	defaultCtxLen := defaultSelectionContextLength
 
 	// 1. 获取或创建会话
 	var sess *model.AISession

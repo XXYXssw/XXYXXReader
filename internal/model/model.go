@@ -57,12 +57,13 @@ type ProgressUpdate struct {
 }
 
 // AIConfig 用户可配置的 AI 伴读参数（全量持久化在 SQLite）
+// 仅支持 OpenAI 兼容协议；划线上下文长度不作为用户配置项，
+// 由 AI 在调用 get_selection_context 时自行决定。
 type AIConfig struct {
-	APIURL               string `json:"api_url"`
-	APIKey               string `json:"api_key"`
-	Model                string `json:"model"`
-	SystemPrompt         string `json:"system_prompt"`
-	DefaultContextLength int    `json:"default_context_length"`
+	APIURL       string `json:"api_url"`
+	APIKey       string `json:"api_key"`
+	Model        string `json:"model"`
+	SystemPrompt string `json:"system_prompt"`
 }
 
 // QuoteMeta 特殊引用块元数据（避免大段明文复制到输入框）

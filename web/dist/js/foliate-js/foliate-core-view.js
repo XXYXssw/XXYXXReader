@@ -83,7 +83,7 @@ const makeZipLoader = async file => {
       return { entries, loadText, loadBlob, getSize };
     } else {
       // 降级使用内置 rawInflate 解包引擎
-      const { ZipArchive } = await import('./zip-fallback.js?v=3.5.0');
+      const { ZipArchive } = await import('./zip-fallback.js?v=3.7.0');
       const ab = await file.arrayBuffer();
       const zip = new ZipArchive(ab);
       const entries = Array.from(zip.entries.values()).map(e => ({ filename: e.filename || e.fileName }));
@@ -313,7 +313,7 @@ export class View extends HTMLElement {
             await import('./fixed-layout.js')
             this.renderer = document.createElement('foliate-fxl')
         } else {
-            await import('./paginator.js?v=3.5.0')
+            await import('./paginator.js?v=3.7.0')
             this.renderer = document.createElement('foliate-paginator')
         }
         this.renderer.setAttribute('exportparts', 'head,foot,filter')

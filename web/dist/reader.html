@@ -76,7 +76,6 @@
           <select id="ai-session-select" class="select-field ai-session-select" title="切换历史对话"></select>
           <button id="btn-ai-new-session" class="btn" style="padding:4px 8px;font-size:11.5px;" type="button" title="开启新对话">+ 新对话</button>
           <button id="btn-ai-delete-session" class="btn btn-danger" style="padding:4px 7px;font-size:11.5px;" type="button" title="删除当前对话">删</button>
-          <button id="btn-ai-toggle-tools" class="btn" style="padding:4px 7px;font-size:11.5px;" type="button" title="显示或隐藏 AI 工具调用过程">工具</button>
           <button id="btn-ai-open-config" class="btn" style="padding:4px 8px;font-size:11.5px;" type="button" title="配置 API 地址、Key、模型与提示词">⚙ 设置</button>
         </div>
 
@@ -236,15 +235,9 @@
       <div style="display:flex;flex-direction:column;gap:12px;font-size:13px;">
         <div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-            <label style="color:var(--stone);">API 接口地址 (兼容 OpenAI / DeepSeek / Ollama)：</label>
+            <label style="color:var(--stone);">API 接口地址（OpenAI 兼容协议）：</label>
           </div>
-          <input id="ai-cfg-url" class="input-field" style="width:100%;margin-bottom:6px;" type="text" placeholder="https://api.openai.com/v1" />
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" class="btn js-ai-preset" style="padding:2px 7px;font-size:11px;" data-url="https://api.openai.com/v1" data-model="gpt-4o-mini">OpenAI</button>
-            <button type="button" class="btn js-ai-preset" style="padding:2px 7px;font-size:11px;" data-url="https://api.deepseek.com/v1" data-model="deepseek-chat">DeepSeek</button>
-            <button type="button" class="btn js-ai-preset" style="padding:2px 7px;font-size:11px;" data-url="https://api.siliconflow.cn/v1" data-model="deepseek-ai/DeepSeek-V3">SiliconFlow</button>
-            <button type="button" class="btn js-ai-preset" style="padding:2px 7px;font-size:11px;" data-url="http://127.0.0.1:11434/v1" data-model="qwen2.5:7b">Ollama本地</button>
-          </div>
+          <input id="ai-cfg-url" class="input-field" style="width:100%;" type="text" placeholder="https://api.openai.com/v1" />
         </div>
 
         <div>
@@ -257,13 +250,8 @@
             <label style="color:var(--stone);">模型名称 (可手动输入或从接口拉取)：</label>
             <button id="btn-ai-fetch-models" class="btn" style="padding:2px 8px;font-size:11.5px;" type="button">拉取模型列表</button>
           </div>
-          <input id="ai-cfg-model" class="input-field" style="width:100%;margin-bottom:6px;" type="text" placeholder="例如：gpt-4o-mini, deepseek-chat" />
+          <input id="ai-cfg-model" class="input-field" style="width:100%;margin-bottom:6px;" type="text" placeholder="例如：gpt-4o-mini" />
           <select id="ai-cfg-model-select" class="select-field" style="width:100%;display:none;"></select>
-        </div>
-
-        <div>
-          <label style="display:block;color:var(--stone);margin-bottom:5px;">划线上下文默认获取长度（供 <code>get_selection_context</code> 工具使用，100~8000 字）：</label>
-          <input id="ai-cfg-ctx-len" class="input-field" style="width:100%;" type="number" min="100" max="8000" step="100" value="1200" />
         </div>
 
         <div>
@@ -288,6 +276,6 @@
     </div>
   </div>
 
-  <script type="module" src="/js/reader-app.js?v=3.6.0"></script>
+  <script type="module" src="/js/reader-app.js?v=3.7.0"></script>
 </body>
 </html>

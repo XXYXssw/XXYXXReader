@@ -133,6 +133,11 @@ func SyncBookNotes(notesDir string, book *model.Book, annotations []model.Annota
 	return noteFilePath, mdContent, nil
 }
 
+// SanitizeNoteFileName 导出文件名安全化：移除路径分隔符与 Obsidian/文件系统非法字符
+func SanitizeNoteFileName(title string) string {
+	return sanitizeNoteFileName(title)
+}
+
 func sanitizeNoteFileName(title string) string {
 	title = strings.TrimSpace(title)
 	title = strings.TrimPrefix(title, "《")
