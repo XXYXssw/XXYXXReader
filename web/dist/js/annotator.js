@@ -1,11 +1,12 @@
-// 四色文人印彩划线批注与 Obsidian 实时同步前端模块
+// 四色文人印彩划线批注与 AI 问书联动模块（全服务端 SQLite 存储）
 import { showToast } from './theme.js';
 
 export class AnnotatorController {
-  constructor({ bookId, view, onAnnotationsChanged }) {
+  constructor({ bookId, view, onAnnotationsChanged, onAskAI }) {
     this.bookId = bookId;
     this.view = view;
     this.onAnnotationsChanged = onAnnotationsChanged;
+    this.onAskAI = onAskAI;
     this.annotations = [];
     this.pendingSelection = null;
     this.activeColor = 'zhusha';
@@ -34,7 +35,6 @@ export class AnnotatorController {
 
     if (!this.popover) return;
 
-    // 防止在 popover 内部点击/输入时事件冒泡导致误触发背景点击
     this.popover.addEventListener('click', (e) => e.stopPropagation());
     this.popover.addEventListener('touchend', (e) => e.stopPropagation());
 
@@ -46,6 +46,22 @@ export class AnnotatorController {
 
     document.getElementById('btn-save-annotation')?.addEventListener('click', () => {
       this.saveCurrentAnnotation();
+    });
+
+    // 划线弹窗中的「✦ 问 AI」按钮：将当前选区作为特殊引用块挂入 AI 伴读面板
+    document.getElementById('btn-ask-ai-annotation')?.addEventListener('click', () => {
+      if (!this.pendingSelection) return;
+      const quotePayload = {
+        selected_text: this.pendingSelection.selected_text,
+        chapter_title: this.pendingSelection.chapter_title || '',
+        chapter_index: this.pendingSelection.chapter_index || 0,
+        cfi: this.pendingSelection.cfi || '',
+        surround_text: this.pendingSelection.surround_text || ''
+      };
+      this.hidePopover();
+      if (this.onAskAI) {
+        this.onAskAI(quotePayload);
+      }
     });
 
     document.getElementById('btn-cancel-annotation')?.addEventListener('click', () => {
@@ -85,6 +101,7 @@ export class AnnotatorController {
       selected_text: txt,
       prefix_text: selectionDetail.prefixText || '',
       suffix_text: selectionDetail.suffixText || '',
+      surround_text: selectionDetail.surroundText || '',
       chapter_index: selectionDetail.chapterIndex || selectionDetail.sectionIndex || 0,
       chapter_title: selectionDetail.chapterTitle || '',
       note: '',
@@ -113,28 +130,23 @@ export class AnnotatorController {
 
     const isMobile = window.innerWidth <= 640;
     if (isMobile) {
-      // 移动端：居中浮动在屏幕下半部或根据触摸点避让
-      const popH = 210;
       this.popover.style.left = '50%';
       this.popover.style.transform = 'translateX(-50%)';
 
       if (clientY && clientY > window.innerHeight * 0.6) {
-        // 如果用户选区偏下方，浮层放在屏幕上方
         this.popover.style.top = '72px';
         this.popover.style.bottom = 'auto';
       } else {
-        // 默认贴近屏幕底部，给软键盘和手指留出最佳操作区
         this.popover.style.top = 'auto';
         this.popover.style.bottom = '24px';
       }
       return;
     }
 
-    // 桌面端：精确定位在选区光标附近
     this.popover.style.transform = 'none';
     this.popover.style.bottom = 'auto';
-    const popW = 310;
-    const popH = 190;
+    const popW = 330;
+    const popH = 195;
     const left = Math.max(12, Math.min(window.innerWidth - popW - 12, (clientX || window.innerWidth / 2) - popW / 2));
     let top = (clientY || 200) + 12;
     if (top + popH > window.innerHeight - 16) {
@@ -172,7 +184,7 @@ export class AnnotatorController {
     }
     this.hidePopover();
     await this.loadAnnotations();
-    showToast('朱批已落库并实时同步至 Obsidian');
+    showToast('朱批已保存至数据库');
   }
 
   async deleteAnnotation(annId) {
@@ -185,13 +197,6 @@ export class AnnotatorController {
     }
     this.hidePopover();
     await this.loadAnnotations();
-    showToast('批注已删除并同步更新 Obsidian');
-  }
-
-  async fetchObsidianMarkdown() {
-    const res = await fetch(`/api/books/${encodeURIComponent(this.bookId)}/notes`);
-    if (!res.ok) return '';
-    const data = await res.json();
-    return data.markdown || '';
+    showToast('批注已删除');
   }
 }

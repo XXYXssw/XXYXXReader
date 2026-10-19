@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,7 +14,7 @@ import (
 	"xxyxx-reader/internal/model"
 )
 
-// Store 封装 SQLite 数据库访问
+// Store 封装单一 SQLite 数据库访问（包含分类、书籍、划线批注、全局设置与 AI 对话历史）
 type Store struct {
 	db *sql.DB
 }
@@ -31,7 +32,6 @@ func Open(dbPath string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 限制单连接写，配合 WAL 彻底杜绝 SQLITE_BUSY
 	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(1)
 
@@ -111,12 +111,48 @@ CREATE TABLE IF NOT EXISTS annotations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_annotations_book_id ON annotations(book_id);
+
+-- 全局与阅读器/AI 配置表（替代前端 localStorage，全量存储在服务端 SQLite）
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+-- AI 伴读会话表
+CREATE TABLE IF NOT EXISTS ai_sessions (
+    id TEXT PRIMARY KEY,
+    book_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '新对话',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_sessions_book_id ON ai_sessions(book_id, updated_at DESC);
+
+-- AI 伴读消息历史表（支持特殊引用块 JSON 与 Tool Call 记录）
+CREATE TABLE IF NOT EXISTS ai_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    book_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    quote_json TEXT NOT NULL DEFAULT '',
+    tool_name TEXT NOT NULL DEFAULT '',
+    tool_arguments TEXT NOT NULL DEFAULT '',
+    visible INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES ai_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_messages_session_id ON ai_messages(session_id, created_at ASC);
 `
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
 	}
 
-	// 兼容旧表结构的平滑列迁移
 	alterStatements := []string{
 		"ALTER TABLE books ADD COLUMN file_hash TEXT NOT NULL DEFAULT '';",
 		"ALTER TABLE annotations ADD COLUMN prefix_text TEXT NOT NULL DEFAULT '';",
@@ -128,6 +164,287 @@ CREATE INDEX IF NOT EXISTS idx_annotations_book_id ON annotations(book_id);
 		_, _ = s.db.Exec(stmt)
 	}
 	return nil
+}
+
+// ==================== 全局设置与 AI 配置 (app_settings) ====================
+
+const DefaultAISystemPrompt = `你是「阅境」书斋的博学伴读先生。你拥有调用工具查阅本书元信息、完整目录、指定章节正文以及划线处前后文语境的能力。
+当读者附上书中引用片段或针对书中内容提问时：
+1. 若引用片段较短或需要结合上下文理解人物关系、前后伏笔，请主动调用 get_selection_context 工具获取前后文；
+2. 若读者询问全书结构、某章节内容或跨章对比，请调用 get_book_toc 或 get_chapter_text 工具核实原文；
+3. 请以温润雅致、条理清晰的中文作答，紧扣原书文本，切勿凭空臆造。`
+
+// GetAllSettings 获取服务端保存的全部前端与 AI 配置
+func (s *Store) GetAllSettings() (map[string]any, error) {
+	rows, err := s.db.Query(`SELECT key, value FROM app_settings`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := map[string]any{
+		"theme":      "rice-paper",
+		"shelf_view": "grid",
+		"reader_settings": map[string]any{
+			"flipMode":   "instant_tap",
+			"fontSize":   19,
+			"fontFamily": "serif",
+			"lineHeight": 1.8,
+			"margin":     6,
+			"marginUnit": "percent",
+			"indent":     true,
+			"justify":    true,
+		},
+		"custom_keys": map[string]any{
+			"next": []string{},
+			"prev": []string{},
+		},
+		"ai_config": model.AIConfig{
+			APIURL:               "https://api.openai.com/v1",
+			APIKey:               "",
+			Model:                "gpt-4o-mini",
+			SystemPrompt:         DefaultAISystemPrompt,
+			DefaultContextLength: 1200,
+		},
+	}
+
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			continue
+		}
+		var parsed any
+		if err := json.Unmarshal([]byte(v), &parsed); err == nil {
+			result[k] = parsed
+		} else {
+			result[k] = v
+		}
+	}
+	return result, rows.Err()
+}
+
+// SaveSettings 批量保存配置项至 app_settings 表
+func (s *Store) SaveSettings(updates map[string]any) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now()
+	for k, v := range updates {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		b, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`
+INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+			k, string(b), now,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetAIConfig 读取当前 AI 配置
+func (s *Store) GetAIConfig() (model.AIConfig, error) {
+	cfg := model.AIConfig{
+		APIURL:               "https://api.openai.com/v1",
+		APIKey:               "",
+		Model:                "gpt-4o-mini",
+		SystemPrompt:         DefaultAISystemPrompt,
+		DefaultContextLength: 1200,
+	}
+	var raw string
+	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'ai_config'`).Scan(&raw)
+	if err == nil && raw != "" {
+		_ = json.Unmarshal([]byte(raw), &cfg)
+	}
+	if strings.TrimSpace(cfg.APIURL) == "" {
+		cfg.APIURL = "https://api.openai.com/v1"
+	}
+	if strings.TrimSpace(cfg.Model) == "" {
+		cfg.Model = "gpt-4o-mini"
+	}
+	if strings.TrimSpace(cfg.SystemPrompt) == "" {
+		cfg.SystemPrompt = DefaultAISystemPrompt
+	}
+	if cfg.DefaultContextLength <= 0 {
+		cfg.DefaultContextLength = 1200
+	}
+	return cfg, nil
+}
+
+// ==================== AI 会话与历史消息管理 ====================
+
+// ListAISessions 获取某本书的所有 AI 会话列表（若无会话则自动创建一个默认会话）
+func (s *Store) ListAISessions(bookID string) ([]model.AISession, error) {
+	rows, err := s.db.Query(`
+SELECT id, book_id, title, created_at, updated_at
+FROM ai_sessions
+WHERE book_id = ?
+ORDER BY updated_at DESC`, bookID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []model.AISession
+	for rows.Next() {
+		var sess model.AISession
+		if err := rows.Scan(&sess.ID, &sess.BookID, &sess.Title, &sess.CreatedAt, &sess.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, sess)
+	}
+	if len(list) == 0 {
+		created, err := s.CreateAISession(bookID, "伴读研习 #1")
+		if err != nil {
+			return []model.AISession{}, nil
+		}
+		return []model.AISession{*created}, nil
+	}
+	return list, rows.Err()
+}
+
+// CreateAISession 创建新的 AI 对话会话
+func (s *Store) CreateAISession(bookID, title string) (*model.AISession, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = "新伴读对话"
+	}
+	now := time.Now()
+	sess := &model.AISession{
+		ID:        NewID("sess"),
+		BookID:    bookID,
+		Title:     title,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	_, err := s.db.Exec(`
+INSERT INTO ai_sessions (id, book_id, title, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?)`,
+		sess.ID, sess.BookID, sess.Title, sess.CreatedAt, sess.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return sess, nil
+}
+
+// GetAISession 获取指定会话
+func (s *Store) GetAISession(sessionID string) (*model.AISession, error) {
+	var sess model.AISession
+	err := s.db.QueryRow(`
+SELECT id, book_id, title, created_at, updated_at
+FROM ai_sessions WHERE id = ?`, sessionID).
+		Scan(&sess.ID, &sess.BookID, &sess.Title, &sess.CreatedAt, &sess.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
+// UpdateAISessionTitle 更新会话标题与更新时间
+func (s *Store) UpdateAISessionTitle(sessionID, title string) error {
+	_, err := s.db.Exec(`UPDATE ai_sessions SET title = ?, updated_at = ? WHERE id = ?`,
+		strings.TrimSpace(title), time.Now(), sessionID)
+	return err
+}
+
+// TouchAISession 更新会话最后活跃时间
+func (s *Store) TouchAISession(sessionID string) {
+	_, _ = s.db.Exec(`UPDATE ai_sessions SET updated_at = ? WHERE id = ?`, time.Now(), sessionID)
+}
+
+// DeleteAISession 删除指定会话（级联删除该会话下的消息）
+func (s *Store) DeleteAISession(sessionID string) error {
+	_, err := s.db.Exec(`DELETE FROM ai_sessions WHERE id = ?`, sessionID)
+	return err
+}
+
+// ClearAISessionMessages 清空指定会话下的所有消息记录
+func (s *Store) ClearAISessionMessages(sessionID string) error {
+	_, err := s.db.Exec(`DELETE FROM ai_messages WHERE session_id = ?`, sessionID)
+	return err
+}
+
+// ListAIMessages 获取某个会话下的全部消息历史
+func (s *Store) ListAIMessages(sessionID string) ([]model.AIMessage, error) {
+	rows, err := s.db.Query(`
+SELECT id, session_id, book_id, role, content, quote_json, tool_name, tool_arguments, visible, created_at
+FROM ai_messages
+WHERE session_id = ?
+ORDER BY created_at ASC, rowid ASC`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var msgs []model.AIMessage
+	for rows.Next() {
+		var m model.AIMessage
+		var quoteRaw string
+		var visInt int
+		if err := rows.Scan(
+			&m.ID, &m.SessionID, &m.BookID, &m.Role, &m.Content,
+			&quoteRaw, &m.ToolName, &m.ToolArguments, &visInt, &m.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		m.Visible = visInt != 0
+		if quoteRaw != "" {
+			var q model.QuoteMeta
+			if err := json.Unmarshal([]byte(quoteRaw), &q); err == nil && q.SelectedText != "" {
+				m.Quote = &q
+			}
+		}
+		msgs = append(msgs, m)
+	}
+	if msgs == nil {
+		msgs = []model.AIMessage{}
+	}
+	return msgs, rows.Err()
+}
+
+// InsertAIMessage 写入一条 AI 对话消息（用户消息、工具调用或 AI 回复）
+func (s *Store) InsertAIMessage(m *model.AIMessage) error {
+	if m.ID == "" {
+		m.ID = NewID("msg")
+	}
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = time.Now()
+	}
+	quoteRaw := ""
+	if m.Quote != nil && strings.TrimSpace(m.Quote.SelectedText) != "" {
+		if b, err := json.Marshal(m.Quote); err == nil {
+			quoteRaw = string(b)
+		}
+	}
+	visInt := 0
+	if m.Visible {
+		visInt = 1
+	}
+	_, err := s.db.Exec(`
+INSERT INTO ai_messages (
+	id, session_id, book_id, role, content, quote_json, tool_name, tool_arguments, visible, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.SessionID, m.BookID, m.Role, m.Content, quoteRaw, m.ToolName, m.ToolArguments, visInt, m.CreatedAt,
+	)
+	if err == nil {
+		s.TouchAISession(m.SessionID)
+	}
+	return err
 }
 
 // ==================== 分类管理 (Categories) ====================
@@ -342,7 +659,7 @@ func (s *Store) GetBookByPath(filePath string) (*model.Book, error) {
 	return b, err
 }
 
-// GetBookByHash 按文件指纹获取书籍（用于移动或重命名后的身份保留）
+// GetBookByHash 按文件指纹获取书籍
 func (s *Store) GetBookByHash(fileHash string) (*model.Book, error) {
 	if fileHash == "" {
 		return nil, nil
@@ -381,7 +698,7 @@ INSERT INTO books (
 	return err
 }
 
-// UpdateBookFileAndMeta 当文件移动、改名或内容更新时，同步更新路径、分类与基础元数据（保留进度和批注）
+// UpdateBookFileAndMeta 更新书籍路径与元数据
 func (s *Store) UpdateBookFileAndMeta(b *model.Book) error {
 	b.UpdatedAt = time.Now()
 	_, err := s.db.Exec(`
@@ -424,7 +741,7 @@ WHERE id = ?`,
 	return err
 }
 
-// DeleteBook 从数据库移除书籍（级联删除批注）
+// DeleteBook 从数据库移除书籍（级联删除批注与 AI 对话历史）
 func (s *Store) DeleteBook(id string) error {
 	_, err := s.db.Exec(`DELETE FROM books WHERE id = ?`, id)
 	return err
@@ -481,7 +798,7 @@ FROM annotations WHERE id = ?`, id).Scan(
 	return &a, nil
 }
 
-// UpsertAnnotation 新增或修改批注（若传入 ID 或同书同 CFI 已存在则更新）
+// UpsertAnnotation 新增或修改批注
 func (s *Store) UpsertAnnotation(a *model.Annotation) (*model.Annotation, error) {
 	now := time.Now()
 	if a.Color == "" {

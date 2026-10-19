@@ -1,5 +1,5 @@
-// 宣纸书架与自定义分类双向管理前端逻辑
-import { ThemeManager, showToast } from './theme.js';
+// 宣纸书架与自定义分类双向管理前端逻辑（全服务端 SQLite 配置同步，零 localStorage）
+import { SettingsStore, ThemeManager, showToast } from './theme.js';
 
 const state = {
   categories: [],
@@ -7,7 +7,7 @@ const state = {
   activeCategory: 'all',
   searchQuery: '',
   sortBy: 'recent',
-  viewMode: localStorage.getItem('xxyxx_shelf_view') || 'grid' // grid | table
+  viewMode: 'grid' // grid | table
 };
 
 function formatFileSize(bytes) {
@@ -85,14 +85,9 @@ function renderCategoryBar() {
     });
   }
 
-  // 当选中某个自定义分类时，展示“重命名分类”与“删除分类”按钮
   const activeCatObj = state.categories.find((c) => c.id === state.activeCategory);
   if (actionsWrap) {
-    if (activeCatObj) {
-      actionsWrap.style.display = 'flex';
-    } else {
-      actionsWrap.style.display = 'none';
-    }
+    actionsWrap.style.display = activeCatObj ? 'flex' : 'none';
   }
 }
 
@@ -261,14 +256,16 @@ function populateUploadCategories() {
   sel.innerHTML = buildCategoryOptionsHTML(currentCat);
 }
 
-function initShelfApp() {
-  ThemeManager.init();
+async function initShelfApp() {
+  const settings = await SettingsStore.load();
+  state.viewMode = settings.shelf_view || 'grid';
+  ThemeManager.setTheme(settings.theme || 'rice-paper', false);
 
   const themeSelect = document.getElementById('theme-select');
   if (themeSelect) {
     themeSelect.value = ThemeManager.current;
     themeSelect.addEventListener('change', (e) => {
-      ThemeManager.setTheme(e.target.value);
+      ThemeManager.setTheme(e.target.value, true);
     });
   }
 
@@ -292,7 +289,6 @@ function initShelfApp() {
     });
   }
 
-  // 视图切换（卡片画廊 vs 水墨存目）
   const viewToggleBtn = document.getElementById('btn-toggle-view');
   const updateViewBtnLabel = () => {
     if (viewToggleBtn) {
@@ -303,13 +299,12 @@ function initShelfApp() {
   if (viewToggleBtn) {
     viewToggleBtn.addEventListener('click', () => {
       state.viewMode = state.viewMode === 'grid' ? 'table' : 'grid';
-      localStorage.setItem('xxyxx_shelf_view', state.viewMode);
+      SettingsStore.save({ shelf_view: state.viewMode });
       updateViewBtnLabel();
       renderBooksView();
     });
   }
 
-  // 手动扫描书库
   const scanBtn = document.getElementById('btn-scan-library');
   if (scanBtn) {
     scanBtn.addEventListener('click', async () => {
@@ -326,11 +321,10 @@ function initShelfApp() {
     });
   }
 
-  // 新建分类弹窗
   const newCatModal = document.getElementById('modal-category');
   const catInput = document.getElementById('input-category-name');
   const catModalTitle = document.getElementById('modal-category-title');
-  let catModalMode = 'create'; // create | rename
+  let catModalMode = 'create';
 
   document.getElementById('btn-new-category')?.addEventListener('click', () => {
     catModalMode = 'create';
@@ -400,7 +394,6 @@ function initShelfApp() {
     }
   });
 
-  // 上传书籍弹窗
   const uploadModal = document.getElementById('modal-upload');
   document.getElementById('btn-open-upload')?.addEventListener('click', () => {
     populateUploadCategories();

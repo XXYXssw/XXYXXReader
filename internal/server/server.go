@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"xxyxx-reader/internal/ai"
 	"xxyxx-reader/internal/book"
 	"xxyxx-reader/internal/config"
 	"xxyxx-reader/internal/db"
 	"xxyxx-reader/internal/model"
-	"xxyxx-reader/internal/obsidian"
 	"xxyxx-reader/internal/opds"
 	"xxyxx-reader/internal/scanner"
 	"xxyxx-reader/web"
@@ -29,6 +29,7 @@ type Server struct {
 	cfg     *config.Config
 	store   *db.Store
 	scanner *scanner.Scanner
+	aiSvc   *ai.Service
 	opds    *opds.Handler
 	mux     *http.ServeMux
 }
@@ -39,6 +40,7 @@ func New(cfg *config.Config, store *db.Store, sc *scanner.Scanner) *Server {
 		cfg:     cfg,
 		store:   store,
 		scanner: sc,
+		aiSvc:   ai.NewService(cfg, store),
 		opds:    opds.NewHandler(store),
 		mux:     http.NewServeMux(),
 	}
@@ -67,7 +69,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/config", s.handleHealth)
 
-	// 手动触发书库扫描（兼容 /api/library/scan 与 /api/books/scan）
+	// 全局用户设置与 AI 配置端点（全量保存在 SQLite app_settings，前端零 localStorage）
+	s.mux.HandleFunc("/api/settings", s.handleSettings)
+	s.mux.HandleFunc("/api/ai/models", s.handleAIModels)
+
+	// 手动触发书库扫描
 	s.mux.HandleFunc("/api/library/scan", s.handleLibraryScan)
 	s.mux.HandleFunc("/api/books/scan", s.handleLibraryScan)
 
@@ -83,6 +89,9 @@ func (s *Server) routes() {
 	// 批注删除 API
 	s.mux.HandleFunc("/api/annotations/", s.handleAnnotationByID)
 
+	// AI 会话单项管理 API
+	s.mux.HandleFunc("/api/ai/sessions/", s.handleAISessionByID)
+
 	// OPDS 1.2 协议端点
 	s.mux.HandleFunc("/opds", s.opds.ServeRoot)
 	s.mux.HandleFunc("/opds/books", s.opds.ServeBooks)
@@ -97,7 +106,6 @@ func (s *Server) routes() {
 		if r.URL.Path == "/reader" {
 			r.URL.Path = "/reader.html"
 		}
-		// 禁用前端静态资源强缓存，确保移动端与墨水屏设备即时同步最新补丁
 		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".html") || strings.HasSuffix(r.URL.Path, ".css") {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 			w.Header().Set("Pragma", "no-cache")
@@ -114,8 +122,64 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"title":       "XXYXXReader v2 · 阅境",
 		"port":        s.cfg.Port,
 		"library_dir": s.cfg.LibraryDir,
-		"notes_dir":   s.cfg.NotesDir,
+		"db_path":     s.cfg.DBPath,
 		"timestamp":   time.Now().Format(time.RFC3339),
+	})
+}
+
+// ==================== 全局设置与 AI 模型探测 API ====================
+
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		settings, err := s.store.GetAllSettings()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, settings)
+
+	case http.MethodPost, http.MethodPut:
+		var updates map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		if err := s.store.SaveSettings(updates); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		settings, _ := s.store.GetAllSettings()
+		writeJSON(w, http.StatusOK, settings)
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleAIModels(w http.ResponseWriter, r *http.Request) {
+	apiURL := r.URL.Query().Get("api_url")
+	apiKey := r.URL.Query().Get("api_key")
+	if r.Method == http.MethodPost {
+		var body struct {
+			APIURL string `json:"api_url"`
+			APIKey string `json:"api_key"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.APIURL != "" {
+			apiURL = body.APIURL
+		}
+		if body.APIKey != "" {
+			apiKey = body.APIKey
+		}
+	}
+	models, err := s.aiSvc.ListModels(r.Context(), apiURL, apiKey)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"models": models,
 	})
 }
 
@@ -202,7 +266,7 @@ func (s *Server) handleCategoryByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ==================== 书籍路由处理 ====================
+// ==================== 书籍与 AI 子路由处理 ====================
 
 func (s *Server) handleBooks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -313,10 +377,117 @@ func (s *Server) handleBookSubroutes(w http.ResponseWriter, r *http.Request) {
 		s.handleBookProgress(w, r, bookID)
 	case "annotations":
 		s.handleBookAnnotations(w, r, bookID)
-	case "notes":
-		s.handleBookNotes(w, r, bookID)
+	case "ai":
+		subAction := ""
+		if len(parts) > 2 {
+			subAction = parts[2]
+		}
+		s.handleBookAI(w, r, bookID, subAction)
 	default:
 		writeError(w, http.StatusNotFound, "unknown book endpoint")
+	}
+}
+
+func (s *Server) handleBookAI(w http.ResponseWriter, r *http.Request, bookID, subAction string) {
+	switch subAction {
+	case "sessions":
+		switch r.Method {
+		case http.MethodGet:
+			sessions, err := s.store.ListAISessions(bookID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, sessions)
+
+		case http.MethodPost:
+			var body struct {
+				Title string `json:"title"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			sess, err := s.store.CreateAISession(bookID, body.Title)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, sess)
+
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+
+	case "chat":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		var req ai.ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		if strings.TrimSpace(req.Message) == "" && (req.Quote == nil || strings.TrimSpace(req.Quote.SelectedText) == "") {
+			writeError(w, http.StatusBadRequest, "提问内容不能为空")
+			return
+		}
+		if strings.TrimSpace(req.Message) == "" && req.Quote != nil {
+			req.Message = "请结合上下文为我解读并赏析这段文字。"
+		}
+		resp, err := s.aiSvc.Chat(r.Context(), bookID, req)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+
+	default:
+		writeError(w, http.StatusNotFound, "unknown book ai endpoint")
+	}
+}
+
+func (s *Server) handleAISessionByID(w http.ResponseWriter, r *http.Request) {
+	rel := strings.TrimPrefix(r.URL.Path, "/api/ai/sessions/")
+	parts := strings.Split(strings.Trim(rel, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeError(w, http.StatusBadRequest, "missing session id")
+		return
+	}
+	sessionID := parts[0]
+	sub := ""
+	if len(parts) > 1 {
+		sub = parts[1]
+	}
+
+	if sub == "messages" {
+		switch r.Method {
+		case http.MethodGet:
+			msgs, err := s.store.ListAIMessages(sessionID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, msgs)
+		case http.MethodDelete:
+			if err := s.store.ClearAISessionMessages(sessionID); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"message": "对话记录已清空"})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+
+	switch r.Method {
+	case http.MethodDelete:
+		if err := s.store.DeleteAISession(sessionID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"message": "对话已删除"})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -340,7 +511,6 @@ func (s *Server) handleBookItem(w http.ResponseWriter, r *http.Request, bookID s
 			writeError(w, http.StatusNotFound, "book not found")
 			return
 		}
-		// 默认同时移除物理文件以避免下次扫描重新入库（可通过 ?keep_file=true 仅移除记录）
 		if r.URL.Query().Get("keep_file") != "true" {
 			_ = os.Remove(b.FilePath)
 		}
@@ -380,7 +550,6 @@ func (s *Server) handleBookCategory(w http.ResponseWriter, r *http.Request, book
 	})
 }
 
-// handleBookContent 使用 http.ServeContent 提供支持 HTTP 206 Range 的零拷贝流式传输
 func (s *Server) handleBookContent(w http.ResponseWriter, r *http.Request, bookID string) {
 	b, err := s.store.GetBook(bookID)
 	if err != nil || b == nil {
@@ -529,8 +698,6 @@ func (s *Server) handleBookAnnotations(w http.ResponseWriter, r *http.Request, b
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		// 同步刷新本地 Obsidian 笔记文件
-		s.syncObsidianForBook(bookID)
 		writeJSON(w, http.StatusOK, saved)
 
 	default:
@@ -549,56 +716,11 @@ func (s *Server) handleAnnotationByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "missing annotation id")
 		return
 	}
-	bookID, err := s.store.DeleteAnnotation(annID)
-	if err != nil {
+	if _, err := s.store.DeleteAnnotation(annID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if bookID != "" {
-		s.syncObsidianForBook(bookID)
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"message": "批注已删除并同步 Obsidian"})
-}
-
-func (s *Server) handleBookNotes(w http.ResponseWriter, r *http.Request, bookID string) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	b, err := s.store.GetBook(bookID)
-	if err != nil || b == nil {
-		writeError(w, http.StatusNotFound, "book not found")
-		return
-	}
-	anns, err := s.store.ListAnnotations(bookID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	notePath, mdContent, err := obsidian.SyncBookNotes(s.cfg.NotesDir, b, anns)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"book_id":   bookID,
-		"file_path": notePath,
-		"markdown":  mdContent,
-	})
-}
-
-func (s *Server) syncObsidianForBook(bookID string) {
-	b, err := s.store.GetBook(bookID)
-	if err != nil || b == nil {
-		return
-	}
-	anns, err := s.store.ListAnnotations(bookID)
-	if err != nil {
-		return
-	}
-	if _, _, err := obsidian.SyncBookNotes(s.cfg.NotesDir, b, anns); err != nil {
-		log.Printf("[obsidian] sync error for book %s: %v", b.Title, err)
-	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "批注已删除"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>阅境 · 沉浸研读</title>
   <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/quikchat.css" />
   <link rel="stylesheet" href="/css/reader.css" />
 </head>
 <body class="reader-page">
@@ -21,6 +22,7 @@
 
       <div class="reader-toolbar-actions">
         <button id="btn-open-toc" class="btn" type="button">目录<span class="desktop-only"> / 朱批</span> (<span id="ann-count-badge">0</span>)</button>
+        <button id="btn-open-ai" class="btn" type="button">✦ AI 伴读</button>
         <button id="btn-open-settings" class="btn btn-primary" type="button">版式<span class="desktop-only"> / 墨水屏设置</span></button>
       </div>
     </header>
@@ -48,29 +50,50 @@
   <!-- 抽屉遮罩层 -->
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
 
-  <!-- 左侧抽屉：目录 / 朱批列表 / Obsidian 笔记实时预览 -->
+  <!-- 左侧抽屉：卷章目录 / 朱批笔记 / AI 伴读（已移除原笔记预览，集成 QuikChat 与特殊引用块） -->
   <aside id="drawer-left" class="drawer-panel left">
     <div class="drawer-header">
       <div class="drawer-tabs">
         <button class="drawer-tab active" data-tab="toc" type="button">卷章目录</button>
-        <button class="drawer-tab" data-tab="anns" type="button">朱批摘录</button>
-        <button class="drawer-tab" data-tab="obsidian" type="button">笔记预览</button>
+        <button class="drawer-tab" data-tab="anns" type="button">朱批笔记</button>
+        <button class="drawer-tab" data-tab="ai" type="button">✦ AI 伴读</button>
       </div>
       <button id="btn-close-left-drawer" class="btn" style="padding:4px 9px;" type="button">✕</button>
     </div>
+
     <div class="drawer-body">
       <div id="tab-panel-toc">
         <ul id="toc-list" class="toc-list"></ul>
       </div>
+
       <div id="tab-panel-anns" style="display:none;">
         <div id="annotations-list"></div>
       </div>
-      <div id="tab-panel-obsidian" style="display:none;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:12px;color:var(--stone);">已自动同步至 <code>notes/《书名》.md</code></span>
-          <button id="btn-copy-obsidian" class="btn" style="padding:4px 10px;font-size:12px;" type="button">复制全文</button>
+
+      <!-- AI 伴读面板 (QuikChat 集成) -->
+      <div id="tab-panel-ai" class="ai-panel-wrap" style="display:none;">
+        <div class="ai-session-bar">
+          <select id="ai-session-select" class="select-field ai-session-select" title="切换历史对话"></select>
+          <button id="btn-ai-new-session" class="btn" style="padding:4px 8px;font-size:11.5px;" type="button" title="开启新对话">+ 新对话</button>
+          <button id="btn-ai-delete-session" class="btn btn-danger" style="padding:4px 7px;font-size:11.5px;" type="button" title="删除当前对话">删</button>
+          <button id="btn-ai-toggle-tools" class="btn" style="padding:4px 7px;font-size:11.5px;" type="button" title="显示或隐藏 AI 工具调用过程">工具</button>
+          <button id="btn-ai-open-config" class="btn" style="padding:4px 8px;font-size:11.5px;" type="button" title="配置 API 地址、Key、模型与提示词">⚙ 设置</button>
         </div>
-        <pre id="obsidian-md-preview" style="font-size:12px;line-height:1.55;white-space:pre-wrap;background:var(--paper-card);padding:12px;border:1px solid var(--crack);border-radius:4px;overflow-x:auto;"></pre>
+
+        <!-- 特殊引用块挂载区（点击划线「✦ 问 AI」后以折叠块挂载于此，绝不大段复制进输入框） -->
+        <div id="ai-attached-quote" class="ai-attached-quote" style="display:none;">
+          <div class="ai-attached-quote-header">
+            <span id="ai-attached-quote-badge" class="ai-quote-badge">✦ 引用块</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:10.5px;color:var(--stone);">点击正文可展开</span>
+              <button id="btn-ai-clear-quote" class="ai-quote-close-btn" type="button" title="移除引用">✕</button>
+            </div>
+          </div>
+          <div id="ai-attached-quote-text" class="ai-attached-quote-text"></div>
+        </div>
+
+        <!-- QuikChat 挂载容器 -->
+        <div id="quikchat-mount" class="quikchat-host"></div>
       </div>
     </div>
   </aside>
@@ -185,7 +208,7 @@
   <!-- 笔记批注防误触全屏透明遮罩 -->
   <div id="annotator-backdrop" class="annotator-backdrop"></div>
 
-  <!-- 四色文人印彩划线批注浮层 -->
+  <!-- 四色文人印彩划线批注与 AI 伴读浮层 -->
   <div id="annotator-popover" class="annotator-popover">
     <div class="seal-colors">
       <button class="seal-btn active" data-color="zhusha" type="button"><span class="seal-dot zhusha"></span>朱砂</button>
@@ -193,12 +216,64 @@
       <button class="seal-btn" data-color="songyan" type="button"><span class="seal-dot songyan"></span>松烟</button>
       <button class="seal-btn" data-color="qiukui" type="button"><span class="seal-dot qiukui"></span>秋葵</button>
     </div>
-    <textarea id="annotator-note-input" class="annotator-textarea" placeholder="批注研读心得（保存后实时直写笔记库）…"></textarea>
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <button id="btn-delete-annotation" class="btn btn-danger" style="padding:4px 10px;font-size:12px;display:none;" type="button">删除批注</button>
-      <div style="display:flex;gap:8px;margin-left:auto;">
-        <button id="btn-cancel-annotation" class="btn" style="padding:4px 10px;font-size:12px;" type="button">取消</button>
-        <button id="btn-save-annotation" class="btn btn-primary" style="padding:4px 12px;font-size:12px;" type="button">钤印保存</button>
+    <textarea id="annotator-note-input" class="annotator-textarea" placeholder="批注研读心得（或直接点击下方「✦ 问 AI」引用此段探讨）…"></textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+      <button id="btn-delete-annotation" class="btn btn-danger" style="padding:4px 8px;font-size:12px;display:none;" type="button">删除</button>
+      <div style="display:flex;gap:6px;margin-left:auto;">
+        <button id="btn-cancel-annotation" class="btn" style="padding:4px 9px;font-size:12px;" type="button">取消</button>
+        <button id="btn-ask-ai-annotation" class="btn btn-ai-accent" style="padding:4px 10px;font-size:12px;" type="button">✦ 问 AI</button>
+        <button id="btn-save-annotation" class="btn btn-primary" style="padding:4px 11px;font-size:12px;" type="button">钤印保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 伴读参数配置模态框（全量保存在服务端 SQLite） -->
+  <div id="modal-ai-config" class="modal-backdrop">
+    <div class="modal-card" style="max-width:480px;">
+      <div class="modal-header">
+        <h3 class="modal-title">AI 伴读参数配置</h3>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:13px;">
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <label style="color:var(--stone);">API 接口地址 (兼容 OpenAI / DeepSeek / Ollama)：</label>
+          </div>
+          <input id="ai-cfg-url" class="input-field" style="width:100%;margin-bottom:6px;" type="text" placeholder="https://api.openai.com/v1" />
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="btn js-ai-preset" style="padding:2px 7px;font-size:11px;" data-url="https://api.openai.com/v1" data-model="gpt-4o-mini">OpenAI</button>
+            <button type="button" class="btn js-ai-preset" style="padding:2px 7px;font-size:11px;" data-url="https://api.deepseek.com/v1" data-model="deepseek-chat">DeepSeek</button>
+            <button type="button" class="btn js-ai-preset" style="padding:2px 7px;font-size:11px;" data-url="https://api.siliconflow.cn/v1" data-model="deepseek-ai/DeepSeek-V3">SiliconFlow</button>
+            <button type="button" class="btn js-ai-preset" style="padding:2px 7px;font-size:11px;" data-url="http://127.0.0.1:11434/v1" data-model="qwen2.5:7b">Ollama本地</button>
+          </div>
+        </div>
+
+        <div>
+          <label style="display:block;color:var(--stone);margin-bottom:5px;">API Key 密钥：</label>
+          <input id="ai-cfg-key" class="input-field" style="width:100%;" type="password" placeholder="sk-..." />
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <label style="color:var(--stone);">模型名称 (可手动输入或从接口拉取)：</label>
+            <button id="btn-ai-fetch-models" class="btn" style="padding:2px 8px;font-size:11.5px;" type="button">拉取模型列表</button>
+          </div>
+          <input id="ai-cfg-model" class="input-field" style="width:100%;margin-bottom:6px;" type="text" placeholder="例如：gpt-4o-mini, deepseek-chat" />
+          <select id="ai-cfg-model-select" class="select-field" style="width:100%;display:none;"></select>
+        </div>
+
+        <div>
+          <label style="display:block;color:var(--stone);margin-bottom:5px;">划线上下文默认获取长度（供 <code>get_selection_context</code> 工具使用，100~8000 字）：</label>
+          <input id="ai-cfg-ctx-len" class="input-field" style="width:100%;" type="number" min="100" max="8000" step="100" value="1200" />
+        </div>
+
+        <div>
+          <label style="display:block;color:var(--stone);margin-bottom:5px;">伴读系统提示词 (System Prompt)：</label>
+          <textarea id="ai-cfg-prompt" class="annotator-textarea" style="min-height:84px;margin-bottom:0;" placeholder="设定伴读先生的角色、语气与解书原则…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-ai-config" class="btn" type="button">取消</button>
+        <button id="btn-save-ai-config" class="btn btn-primary" type="button">保存配置</button>
       </div>
     </div>
   </div>
@@ -213,6 +288,6 @@
     </div>
   </div>
 
-  <script type="module" src="/js/reader-app.js?v=3.5.0"></script>
+  <script type="module" src="/js/reader-app.js?v=3.6.0"></script>
 </body>
 </html>

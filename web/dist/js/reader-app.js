@@ -1,7 +1,8 @@
-// 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、墨水屏物理按键录制与进度同步
-import './foliate-js/view.js?v=3.5.0';
-import { ThemeManager, showToast } from './theme.js';
+// 阅读器总控应用：排版五要素、三模翻页、二维九宫格热区、AI 伴读与全服务端 SQLite 状态同步（零 localStorage）
+import './foliate-js/view.js?v=3.6.0';
+import { SettingsStore, ThemeManager, showToast } from './theme.js';
 import { AnnotatorController } from './annotator.js';
+import { AIChatController } from './ai-chat.js';
 
 const SEAL_LABELS = {
   zhusha: '朱砂印',
@@ -45,76 +46,89 @@ class ReaderApp {
     this.progressTimer = null;
     this.initialLoadDone = false;
 
-    this.settings = this._loadSettings();
-    this.customKeys = this._loadCustomKeys();
-    this.recordingTarget = null; // 'next' | 'prev' | null
+    this.settings = {
+      flipMode: 'instant_tap',
+      fontSize: 19,
+      fontFamily: 'serif',
+      lineHeight: 1.8,
+      margin: 6,
+      marginUnit: 'percent',
+      indent: true,
+      justify: true
+    };
+    this.customKeys = { next: [], prev: [] };
+    this.recordingTarget = null;
+    this.aiChat = null;
   }
 
-  _loadSettings() {
-    try {
-      const saved = JSON.parse(localStorage.getItem('xxyxx_reader_settings') || '{}');
-      // 平滑迁移旧版绝对像素 margin 到屏幕宽度百分比 (0% ~ 35%，默认 6%)
-      let marginPct = 6;
-      if (saved.marginUnit === 'percent' && saved.margin !== undefined) {
-        marginPct = Math.max(0, Math.min(35, Number(saved.margin)));
-      } else if (saved.margin !== undefined) {
-        const raw = Number(saved.margin);
-        marginPct = raw <= 35 ? Math.max(0, raw) : Math.min(35, Math.round((raw / 1200) * 100));
-      }
-      return {
-        flipMode: saved.flipMode || 'instant_tap',
-        fontSize: Number(saved.fontSize) || 19,
-        fontFamily: saved.fontFamily || 'serif',
-        lineHeight: Number(saved.lineHeight) || 1.8,
-        margin: marginPct,
-        marginUnit: 'percent',
-        indent: saved.indent !== undefined ? Boolean(saved.indent) : true,
-        justify: saved.justify !== undefined ? Boolean(saved.justify) : true
-      };
-    } catch (_) {
-      return {
-        flipMode: 'instant_tap',
-        fontSize: 19,
-        fontFamily: 'serif',
-        lineHeight: 1.8,
-        margin: 6,
-        marginUnit: 'percent',
-        indent: true,
-        justify: true
-      };
+  _applyLoadedSettings(remoteData) {
+    const saved = remoteData?.reader_settings || {};
+    let marginPct = 6;
+    if (saved.marginUnit === 'percent' && saved.margin !== undefined) {
+      marginPct = Math.max(0, Math.min(35, Number(saved.margin)));
+    } else if (saved.margin !== undefined) {
+      const raw = Number(saved.margin);
+      marginPct = raw <= 35 ? Math.max(0, raw) : Math.min(35, Math.round((raw / 1200) * 100));
     }
+    this.settings = {
+      flipMode: saved.flipMode || 'instant_tap',
+      fontSize: Number(saved.fontSize) || 19,
+      fontFamily: saved.fontFamily || 'serif',
+      lineHeight: Number(saved.lineHeight) || 1.8,
+      margin: marginPct,
+      marginUnit: 'percent',
+      indent: saved.indent !== undefined ? Boolean(saved.indent) : true,
+      justify: saved.justify !== undefined ? Boolean(saved.justify) : true
+    };
+
+    const ck = remoteData?.custom_keys || {};
+    this.customKeys = {
+      next: Array.isArray(ck.next) ? ck.next : [],
+      prev: Array.isArray(ck.prev) ? ck.prev : []
+    };
   }
 
   _saveSettings() {
     this.settings.marginUnit = 'percent';
-    localStorage.setItem('xxyxx_reader_settings', JSON.stringify(this.settings));
-  }
-
-  _loadCustomKeys() {
-    try {
-      return JSON.parse(localStorage.getItem('xxyxx_custom_keys') || '{"next":[],"prev":[]}');
-    } catch (_) {
-      return { next: [], prev: [] };
-    }
+    SettingsStore.save({ reader_settings: this.settings });
   }
 
   _saveCustomKeys() {
-    localStorage.setItem('xxyxx_custom_keys', JSON.stringify(this.customKeys));
+    SettingsStore.save({ custom_keys: this.customKeys });
     this._renderCustomKeysHint();
   }
 
   async init() {
-    ThemeManager.init();
+    const allSettings = await SettingsStore.load();
+    ThemeManager.setTheme(allSettings.theme || 'rice-paper', false);
+    this._applyLoadedSettings(allSettings);
+
     if (!this.bookId) {
       showToast('缺少书籍 ID，正在返回书架');
       setTimeout(() => { window.location.href = '/'; }, 1000);
       return;
     }
 
+    this.aiChat = new AIChatController({
+      bookId: this.bookId,
+      getBookContext: () => ({
+        chapterIndex: this.view.currentSectionIndex,
+        chapterTitle: document.getElementById('status-chapter')?.textContent || ''
+      }),
+      onJumpToCFI: (cfi) => {
+        this.view.goToCFI(cfi);
+        if (window.innerWidth <= 640) {
+          document.getElementById('drawer-backdrop')?.classList.remove('active');
+          document.getElementById('drawer-left')?.classList.remove('active');
+        }
+      }
+    });
+
     this.annotator = new AnnotatorController({
       bookId: this.bookId,
       view: this.view,
-      onAnnotationsChanged: (anns) => this._renderAnnotationsList(anns)
+      onAnnotationsChanged: (anns) => this._renderAnnotationsList(anns),
+      onAskAI: (quotePayload) => this.openAIChatWithQuote(quotePayload)
     });
 
     this._bindUIControls();
@@ -128,10 +142,11 @@ class ReaderApp {
       document.title = `《${this.bookMeta.title}》 · 阅境`;
       document.getElementById('topbar-book-title').textContent = `《${this.bookMeta.title}》`;
 
-      // 先加载该书已有的划线批注，确保章节首次渲染时即可立即挂载高亮
-      await this.annotator.loadAnnotations();
+      await Promise.all([
+        this.annotator.loadAnnotations(),
+        this.aiChat.loadSessions()
+      ]);
 
-      // 拉取书籍字节流（MD/TXT 后端已自动转为虚拟 EPUB 缓存流）
       const contentRes = await fetch(`/api/books/${encodeURIComponent(this.bookId)}/content`);
       if (!contentRes.ok) throw new Error('拉取书籍内容失败');
       const buffer = await contentRes.arrayBuffer();
@@ -153,6 +168,34 @@ class ReaderApp {
     }
   }
 
+  // 打开左侧边栏的 AI 伴读标签并挂载特殊引用块
+  openAIChatWithQuote(quotePayload) {
+    this._setBarsVisible(false);
+    const backdrop = document.getElementById('drawer-backdrop');
+    const leftDrawer = document.getElementById('drawer-left');
+    backdrop?.classList.add('active');
+    leftDrawer?.classList.add('active');
+    leftDrawer?.classList.add('ai-expanded');
+    this._switchLeftTab('ai');
+    if (quotePayload && this.aiChat) {
+      this.aiChat.attachQuote(quotePayload);
+    }
+  }
+
+  _switchLeftTab(target) {
+    const leftDrawer = document.getElementById('drawer-left');
+    leftDrawer?.classList.toggle('ai-expanded', target === 'ai');
+    for (const b of document.querySelectorAll('.drawer-tab')) {
+      b.classList.toggle('active', b.getAttribute('data-tab') === target);
+    }
+    const tocPanel = document.getElementById('tab-panel-toc');
+    const annsPanel = document.getElementById('tab-panel-anns');
+    const aiPanel = document.getElementById('tab-panel-ai');
+    if (tocPanel) tocPanel.style.display = target === 'toc' ? 'block' : 'none';
+    if (annsPanel) annsPanel.style.display = target === 'anns' ? 'block' : 'none';
+    if (aiPanel) aiPanel.style.display = target === 'ai' ? 'flex' : 'none';
+  }
+
   _normalizeKey(key, keyCode) {
     let k = key;
     const c = Number(keyCode) || 0;
@@ -168,7 +211,6 @@ class ReaderApp {
   }
 
   _bindViewEvents() {
-    // 1. 二维九宫格触控热区判定
     this.view.addEventListener('viewport-tap', (e) => {
       if (this.annotator && this.annotator.isActive()) {
         this.annotator.hidePopover();
@@ -176,7 +218,6 @@ class ReaderApp {
       }
 
       const { xRatio, yRatio } = e.detail;
-      // 中心九宫格矩形 [X: 30%~70%, Y: 25%~75%] 呼出/收起菜单
       if (xRatio >= 0.30 && xRatio <= 0.70 && yRatio >= 0.25 && yRatio <= 0.75) {
         this._toggleBars();
         return;
@@ -184,7 +225,6 @@ class ReaderApp {
       if (this.barsVisible) {
         this._setBarsVisible(false);
       }
-      // 左侧 < 35% 上一页，右侧 >= 35% 下一页（单手盲按友好）
       if (xRatio < 0.35) {
         this.view.prev();
       } else {
@@ -192,17 +232,14 @@ class ReaderApp {
       }
     });
 
-    // 2. 选词触发四色印彩批注框
     this.view.addEventListener('text-selected', (e) => {
       this.annotator.showForSelection(e.detail);
     });
 
-    // 3. 点击已有高亮编辑或删除
     this.view.addEventListener('annotation-clicked', (e) => {
       this.annotator.showForExisting(e.detail.id, e.detail.clientX, e.detail.clientY);
     });
 
-    // 4. 翻页进度变更与自动防抖落库
     this.view.addEventListener('relocate', (e) => {
       const {
         page = 1,
@@ -231,7 +268,6 @@ class ReaderApp {
       }
     });
 
-    // 5. 键盘与墨水屏实体按键支持
     let lastTurnTime = 0;
     const handleKey = (rawKey, rawCode, origEvent) => {
       const { key, keyCode } = this._normalizeKey(rawKey, rawCode);
@@ -241,7 +277,7 @@ class ReaderApp {
         return;
       }
       const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
-      if (activeTag === 'textarea' || activeTag === 'input') return;
+      if (activeTag === 'textarea' || activeTag === 'input' || activeTag === 'select') return;
 
       const token = `${key}#${keyCode}`;
       const isNext = [
@@ -336,6 +372,11 @@ class ReaderApp {
       this._setBarsVisible(false);
       backdrop?.classList.add('active');
       leftDrawer?.classList.add('active');
+      this._switchLeftTab('toc');
+    });
+
+    document.getElementById('btn-open-ai')?.addEventListener('click', () => {
+      this.openAIChatWithQuote(null);
     });
 
     document.getElementById('btn-open-settings')?.addEventListener('click', () => {
@@ -344,31 +385,13 @@ class ReaderApp {
       rightDrawer?.classList.add('active');
     });
 
-    // 左侧抽屉 Tab 切换（目录 / 朱批 / Obsidian 笔记预览）
+    // 左侧抽屉 Tab 切换（卷章目录 / 朱批笔记 / AI 伴读）
     for (const tabBtn of document.querySelectorAll('.drawer-tab')) {
-      tabBtn.addEventListener('click', async () => {
+      tabBtn.addEventListener('click', () => {
         const target = tabBtn.getAttribute('data-tab');
-        for (const b of document.querySelectorAll('.drawer-tab')) {
-          b.classList.toggle('active', b === tabBtn);
-        }
-        document.getElementById('tab-panel-toc').style.display = target === 'toc' ? 'block' : 'none';
-        document.getElementById('tab-panel-anns').style.display = target === 'anns' ? 'block' : 'none';
-        document.getElementById('tab-panel-obsidian').style.display = target === 'obsidian' ? 'block' : 'none';
-
-        if (target === 'obsidian') {
-          const md = await this.annotator.fetchObsidianMarkdown();
-          document.getElementById('obsidian-md-preview').textContent = md || '尚无笔记内容';
-        }
+        this._switchLeftTab(target);
       });
     }
-
-    document.getElementById('btn-copy-obsidian')?.addEventListener('click', async () => {
-      const md = await this.annotator.fetchObsidianMarkdown();
-      if (navigator.clipboard && md) {
-        await navigator.clipboard.writeText(md);
-        showToast('已复制 Obsidian Markdown 笔记全文');
-      }
-    });
 
     // 底部章节与进度条控制
     document.getElementById('btn-prev-chapter')?.addEventListener('click', () => {
@@ -393,7 +416,7 @@ class ReaderApp {
     for (const btn of document.querySelectorAll('[data-set-theme]')) {
       btn.addEventListener('click', () => {
         const t = btn.getAttribute('data-set-theme');
-        ThemeManager.setTheme(t);
+        ThemeManager.setTheme(t, true);
         if (t === 'e-ink') {
           this.settings.flipMode = 'instant_tap';
           this._saveSettings();
@@ -413,7 +436,7 @@ class ReaderApp {
       });
     }
 
-    // 1. 字号微调 (12px ~ 36px + A-/A+)
+    // 1. 字号微调
     const applyFontSize = (sz) => {
       this.settings.fontSize = Math.max(12, Math.min(36, sz));
       this._saveSettings();
@@ -444,7 +467,7 @@ class ReaderApp {
       });
     }
 
-    // 4. 版心留白比例微调 (单侧 0% ~ 35% 屏幕宽度比例，兼具 狭/阔 步进按钮)
+    // 4. 版心留白比例微调 (单侧 0% ~ 35% 屏幕宽度比例)
     const applyMargin = (m) => {
       this.settings.margin = Math.max(0, Math.min(35, Math.round(Number(m) || 0)));
       this._saveSettings();
@@ -496,7 +519,6 @@ class ReaderApp {
       showToast('已恢复默认翻页键映射');
     });
 
-    // 九宫格热区示意浮层
     const tzGuide = document.getElementById('touch-zone-guide');
     document.getElementById('btn-show-tz-guide')?.addEventListener('click', () => {
       closeDrawers();
@@ -608,7 +630,7 @@ class ReaderApp {
     if (!container) return;
 
     if (annotations.length === 0) {
-      container.innerHTML = `<p style="color:var(--stone);font-size:13px;text-align:center;padding:32px 0;">在正文中长按或鼠标选词，即可加盖文人四色印彩并直写 Obsidian 笔记。</p>`;
+      container.innerHTML = `<p style="color:var(--stone);font-size:13px;text-align:center;padding:32px 0;">在正文中长按或鼠标选词，即可加盖四色印彩或点击「✦ 问 AI」交谈。</p>`;
       return;
     }
 
@@ -618,7 +640,10 @@ class ReaderApp {
         ${a.note ? `<div class="ann-note">批注：${escapeHTML(a.note)}</div>` : ''}
         <div class="ann-meta">
           <span>${SEAL_LABELS[a.color] || '朱砂印'} · ${escapeHTML(a.chapter_title || '正文')}</span>
-          <button class="btn btn-danger js-del-ann" style="padding:2px 6px;font-size:11px;" data-ann-id="${escapeHTML(a.id)}">删</button>
+          <div style="display:flex;gap:5px;">
+            <button class="btn js-ask-ai-ann" style="padding:2px 7px;font-size:11px;" data-ann-id="${escapeHTML(a.id)}">✦ 问 AI</button>
+            <button class="btn btn-danger js-del-ann" style="padding:2px 6px;font-size:11px;" data-ann-id="${escapeHTML(a.id)}">删</button>
+          </div>
         </div>
       </div>
     `).join('');
@@ -628,6 +653,21 @@ class ReaderApp {
         this.view.goToCFI(q.getAttribute('data-cfi'));
         document.getElementById('drawer-backdrop')?.classList.remove('active');
         document.getElementById('drawer-left')?.classList.remove('active');
+      });
+    }
+
+    for (const aiBtn of container.querySelectorAll('.js-ask-ai-ann')) {
+      aiBtn.addEventListener('click', () => {
+        const annId = aiBtn.getAttribute('data-ann-id');
+        const found = annotations.find((item) => item.id === annId);
+        if (found) {
+          this.openAIChatWithQuote({
+            selected_text: found.selected_text,
+            chapter_title: found.chapter_title || '',
+            chapter_index: found.chapter_index || 0,
+            cfi: found.cfi || ''
+          });
+        }
       });
     }
 
