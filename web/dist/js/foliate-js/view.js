@@ -239,7 +239,7 @@ export class FoliateView extends HTMLElement {
     const viewH = Math.max(300, this.iframe.clientHeight || window.innerHeight);
     const padX = Number(this.settings.margin) || 28;
     const padY = 24;
-    const colWidth = Math.max(200, viewW - padX * 2);
+    const colWidth = Math.max(160, viewW - padX * 2);
     const colGap = padX * 2;
 
     styleEl.textContent = `
@@ -250,7 +250,6 @@ export class FoliateView extends HTMLElement {
         background: transparent !important;
         font-family: ${fontStack} !important;
         font-size: ${this.settings.fontSize}px !important;
-        line-height: ${this.settings.lineHeight} !important;
         -webkit-font-smoothing: antialiased;
       }
       ${isContinuous ? `
@@ -272,8 +271,8 @@ export class FoliateView extends HTMLElement {
       #xxyxx-reader-root {
         box-sizing: border-box !important;
         height: ${viewH - padY * 2}px !important;
-        margin-top: ${padY}px !important;
-        padding: 0 ${padX}px !important;
+        margin: ${padY}px 0 0 0 !important;
+        padding: 0 !important;
         column-width: ${colWidth}px !important;
         column-gap: ${colGap}px !important;
         column-fill: auto !important;
@@ -281,16 +280,44 @@ export class FoliateView extends HTMLElement {
         will-change: transform;
       }
       `}
-      p {
-        margin: 0.55em 0 !important;
-        text-indent: ${this.settings.indent ? '2em' : '0'} !important;
-        text-align: ${this.settings.justify ? 'justify' : 'left'} !important;
+
+      /* 穿透覆盖 EPUB 内自带的所有标签与类名行距与字体 */
+      #xxyxx-reader-root,
+      #xxyxx-reader-root p,
+      #xxyxx-reader-root div,
+      #xxyxx-reader-root span,
+      #xxyxx-reader-root li,
+      #xxyxx-reader-root blockquote,
+      #xxyxx-reader-root a {
+        font-family: ${fontStack} !important;
+        line-height: ${this.settings.lineHeight} !important;
       }
-      h1, h2, h3, h4 {
+
+      #xxyxx-reader-root h1,
+      #xxyxx-reader-root h2,
+      #xxyxx-reader-root h3,
+      #xxyxx-reader-root h4,
+      #xxyxx-reader-root h5,
+      #xxyxx-reader-root h6 {
         color: ${palette.fg} !important;
+        font-family: ${fontStack} !important;
         text-indent: 0 !important;
         line-height: 1.35 !important;
         break-inside: avoid;
+      }
+
+      /* 穿透覆盖 EPUB 段落的外边距、对齐与缩进 */
+      #xxyxx-reader-root p,
+      #xxyxx-reader-root .content,
+      #xxyxx-reader-root [class*="content"] {
+        margin-top: 0.55em !important;
+        margin-bottom: 0.55em !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        text-indent: ${this.settings.indent ? '2em' : '0'} !important;
+        text-align: ${this.settings.justify ? 'justify' : 'left'} !important;
       }
       img, svg {
         max-width: 100% !important;
@@ -345,9 +372,11 @@ export class FoliateView extends HTMLElement {
       return;
     }
 
+    void root.offsetWidth; // 触发同步重排以获取最新的真实 scrollWidth
     const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
+    const padX = Number(this.settings.margin) || 28;
     const scrollW = Math.max(viewW, root.scrollWidth);
-    this.totalPagesInSection = Math.max(1, Math.round(scrollW / viewW));
+    this.totalPagesInSection = Math.max(1, Math.round((scrollW + padX * 2) / viewW));
     if (this.currentPage >= this.totalPagesInSection) {
       this.currentPage = this.totalPagesInSection - 1;
     }
@@ -368,7 +397,8 @@ export class FoliateView extends HTMLElement {
     root.style.transition = shouldAnimate ? 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none';
 
     const viewW = Math.max(320, this.iframe.clientWidth || window.innerWidth);
-    const offset = -this.currentPage * viewW;
+    const padX = Number(this.settings.margin) || 28;
+    const offset = -this.currentPage * viewW + padX;
     root.style.transform = `translate3d(${offset}px, 0, 0)`;
   }
 
