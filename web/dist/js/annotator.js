@@ -11,13 +11,32 @@ export class AnnotatorController {
     this.activeColor = 'zhusha';
 
     this.popover = document.getElementById('annotator-popover');
+    this.backdrop = document.getElementById('annotator-backdrop');
     this.noteInput = document.getElementById('annotator-note-input');
     this.deleteBtn = document.getElementById('btn-delete-annotation');
     this._bindPopoverEvents();
   }
 
+  isActive() {
+    return this.popover ? this.popover.classList.contains('active') : false;
+  }
+
   _bindPopoverEvents() {
+    if (this.backdrop) {
+      const handleDismiss = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.hidePopover();
+      };
+      this.backdrop.addEventListener('click', handleDismiss);
+      this.backdrop.addEventListener('touchend', handleDismiss);
+    }
+
     if (!this.popover) return;
+
+    // 防止在 popover 内部点击/输入时事件冒泡导致误触发背景点击
+    this.popover.addEventListener('click', (e) => e.stopPropagation());
+    this.popover.addEventListener('touchend', (e) => e.stopPropagation());
 
     for (const btn of this.popover.querySelectorAll('.seal-btn')) {
       btn.addEventListener('click', () => {
@@ -89,6 +108,30 @@ export class AnnotatorController {
   _positionPopover(clientX, clientY) {
     if (!this.popover) return;
     this.popover.classList.add('active');
+    if (this.backdrop) this.backdrop.classList.add('active');
+
+    const isMobile = window.innerWidth <= 640;
+    if (isMobile) {
+      // 移动端：居中浮动在屏幕下半部或根据触摸点避让
+      const popH = 210;
+      this.popover.style.left = '50%';
+      this.popover.style.transform = 'translateX(-50%)';
+
+      if (clientY && clientY > window.innerHeight * 0.6) {
+        // 如果用户选区偏下方，浮层放在屏幕上方
+        this.popover.style.top = '72px';
+        this.popover.style.bottom = 'auto';
+      } else {
+        // 默认贴近屏幕底部，给软键盘和手指留出最佳操作区
+        this.popover.style.top = 'auto';
+        this.popover.style.bottom = '24px';
+      }
+      return;
+    }
+
+    // 桌面端：精确定位在选区光标附近
+    this.popover.style.transform = 'none';
+    this.popover.style.bottom = 'auto';
     const popW = 310;
     const popH = 190;
     const left = Math.max(12, Math.min(window.innerWidth - popW - 12, (clientX || window.innerWidth / 2) - popW / 2));
@@ -102,6 +145,10 @@ export class AnnotatorController {
 
   hidePopover() {
     if (this.popover) this.popover.classList.remove('active');
+    if (this.backdrop) this.backdrop.classList.remove('active');
+    if (this.view && typeof this.view.clearSelection === 'function') {
+      this.view.clearSelection();
+    }
     this.pendingSelection = null;
   }
 

@@ -1,4 +1,4 @@
-# XXYXXReader · 阅境
+# XXYXXReader v2 · 阅境
 
 > **东方水墨宣纸美学 · 全设备响应式与墨水屏深度调优 · 物理文件夹分类双向同步 · 划线直写 Obsidian · 纯 Go 零 CGO 单二进制阅读服务**
 
@@ -43,11 +43,11 @@ make build
 make run
 ```
 
-启动后浏览器访问：`http://127.0.0.1:8980`
+启动后浏览器访问：`http://127.0.0.1:8999`
 
 ### 2. ServiceHub 注册（macOS）
 
 ```bash
 hubctl register ./servicehub.json
-hubctl start xxyxx-reader
+hubctl start xxyxx-reader-v2
 ```

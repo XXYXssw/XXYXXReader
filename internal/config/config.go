@@ -20,7 +20,7 @@ type Config struct {
 // Default 返回默认配置
 func Default() *Config {
 	return &Config{
-		Port:       8980,
+		Port:       8999,
 		Bind:       "0.0.0.0",
 		LibraryDir: "./library",
 		NotesDir:   "./notes",

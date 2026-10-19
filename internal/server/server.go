@@ -62,12 +62,14 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) routes() {
-	// 健康检查与配置查询（同时兼容 /api/health 与 /api/config）
+	// 健康检查与配置查询（同时兼容 /health, /api/health 与 /api/config）
+	s.mux.HandleFunc("/health", s.handleHealth)
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/config", s.handleHealth)
 
-	// 手动触发书库扫描
+	// 手动触发书库扫描（兼容 /api/library/scan 与 /api/books/scan）
 	s.mux.HandleFunc("/api/library/scan", s.handleLibraryScan)
+	s.mux.HandleFunc("/api/books/scan", s.handleLibraryScan)
 
 	// 分类管理 API
 	s.mux.HandleFunc("/api/categories", s.handleCategories)
@@ -103,7 +105,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":      "ok",
 		"service":     "xxyxx-reader",
-		"title":       "XXYXXReader · 阅境",
+		"title":       "XXYXXReader v2 · 阅境",
 		"port":        s.cfg.Port,
 		"library_dir": s.cfg.LibraryDir,
 		"notes_dir":   s.cfg.NotesDir,

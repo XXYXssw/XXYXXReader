@@ -329,6 +329,19 @@ foliate-view {
   border-color: #000000;
 }
 
+/* 划线批注防误触遮罩 */
+.annotator-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: transparent;
+  display: none;
+}
+
+.annotator-backdrop.active {
+  display: block;
+}
+
 /* 四色文人印彩选词浮层 */
 .annotator-popover {
   position: fixed;
@@ -459,4 +472,108 @@ foliate-view {
   justify-content: center;
   text-align: center;
   padding: 16px;
+}
+
+/* ==========================================================================
+   移动端响应式深度适配 (Mobile Viewport Optimizations)
+   ========================================================================== */
+@media (max-width: 640px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* 顶部导航栏紧凑布局，杜绝换行挤压 */
+  .reader-topbar {
+    height: 48px;
+    padding: 0 10px;
+  }
+
+  .reader-book-info {
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .reader-book-title {
+    font-size: 13.5px;
+    max-width: 120px;
+  }
+
+  .reader-chapter-title {
+    display: none; /* 移动端顶栏隐藏章节，底部微状态栏已有清晰显示 */
+  }
+
+  .reader-toolbar-actions {
+    gap: 6px;
+  }
+
+  .reader-toolbar-actions .btn {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  /* 底部折叠翻页控制栏 */
+  .reader-bottombar {
+    height: 52px;
+    padding: 0 12px calc(env(safe-area-inset-bottom, 0px) + 2px);
+    gap: 10px;
+  }
+
+  .reader-bottombar .btn {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .progress-slider-wrap {
+    gap: 8px;
+    font-size: 11.5px;
+  }
+
+  /* 常驻微状态栏适配全面屏安全区 */
+  .reader-micro-status {
+    height: 24px;
+    padding: 0 12px;
+    font-size: 11px;
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* 抽屉面板紧凑化 */
+  .drawer-panel {
+    width: 86vw;
+    max-width: 320px;
+  }
+
+  .drawer-header {
+    padding: 12px 14px;
+  }
+
+  .drawer-body {
+    padding: 12px 14px;
+  }
+
+  /* 移动端选词弹窗自适应卡片 */
+  .annotator-popover {
+    width: calc(100vw - 24px);
+    max-width: 360px;
+    padding: 10px 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22);
+  }
+
+  .seal-colors {
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .seal-btn {
+    padding: 5px 3px;
+    font-size: 11.5px;
+    gap: 3px;
+  }
+
+  .annotator-textarea {
+    min-height: 52px;
+    font-size: 12.5px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+  }
 }

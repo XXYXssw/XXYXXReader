@@ -20,8 +20,8 @@
       </div>
 
       <div class="reader-toolbar-actions">
-        <button id="btn-open-toc" class="btn" type="button">目录 / 朱批 (<span id="ann-count-badge">0</span>)</button>
-        <button id="btn-open-settings" class="btn btn-primary" type="button">版式 / 墨水屏设置</button>
+        <button id="btn-open-toc" class="btn" type="button">目录<span class="desktop-only"> / 朱批</span> (<span id="ann-count-badge">0</span>)</button>
+        <button id="btn-open-settings" class="btn btn-primary" type="button">版式<span class="desktop-only"> / 墨水屏设置</span></button>
       </div>
     </header>
 
@@ -171,6 +171,9 @@
       </div>
     </div>
   </aside>
+
+  <!-- 笔记批注防误触全屏透明遮罩 -->
+  <div id="annotator-backdrop" class="annotator-backdrop"></div>
 
   <!-- 四色文人印彩划线批注浮层 -->
   <div id="annotator-popover" class="annotator-popover">

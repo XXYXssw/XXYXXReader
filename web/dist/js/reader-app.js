@@ -122,7 +122,12 @@ class ReaderApp {
   _bindViewEvents() {
     // 1. 二维九宫格触控热区判定
     this.view.addEventListener('viewport-tap', (e) => {
-      this.annotator.hidePopover();
+      // 若当前笔记/批注界面正处于弹出状态，点击任意区域的首要行为是收起笔记浮层，绝不误触翻页或菜单！
+      if (this.annotator && this.annotator.isActive()) {
+        this.annotator.hidePopover();
+        return;
+      }
+
       const { xRatio, yRatio } = e.detail;
       // 中心九宫格矩形 [X: 30%~70%, Y: 25%~75%] 呼出/收起菜单
       if (xRatio >= 0.30 && xRatio <= 0.70 && yRatio >= 0.25 && yRatio <= 0.75) {
@@ -241,6 +246,12 @@ class ReaderApp {
       rightDrawer?.classList.remove('active');
       this.recordingTarget = null;
     };
+
+    window.addEventListener('click', (e) => {
+      if (this.annotator && this.annotator.isActive() && !e.target.closest('#annotator-popover')) {
+        this.annotator.hidePopover();
+      }
+    });
 
     backdrop?.addEventListener('click', closeDrawers);
     document.getElementById('btn-close-left-drawer')?.addEventListener('click', closeDrawers);

@@ -108,9 +108,9 @@ func (h *Handler) ServeRoot(w http.ResponseWriter, r *http.Request) {
 		DC:      "http://purl.org/dc/terms/",
 		OPDS:    "http://opds-spec.org/2010/catalog",
 		ID:      "urn:xxyxx:opds:root",
-		Title:   "XXYXXReader · 阅境 OPDS 藏书阁",
+		Title:   "XXYXXReader v2 · 阅境 OPDS 藏书阁",
 		Updated: now,
-		Author:  Author{Name: "XXYXXReader"},
+		Author:  Author{Name: "XXYXXReader v2"},
 		Links: []Link{
 			{Rel: "self", Href: "/opds", Type: "application/atom+xml;profile=opds-catalog;kind=navigation"},
 			{Rel: "start", Href: "/opds", Type: "application/atom+xml;profile=opds-catalog;kind=navigation"},
@@ -145,9 +145,9 @@ func (h *Handler) ServeBooks(w http.ResponseWriter, r *http.Request) {
 		DC:      "http://purl.org/dc/terms/",
 		OPDS:    "http://opds-spec.org/2010/catalog",
 		ID:      "urn:xxyxx:opds:books:" + catID,
-		Title:   "XXYXXReader · 书目列表",
+		Title:   "XXYXXReader v2 · 书目列表",
 		Updated: now,
-		Author:  Author{Name: "XXYXXReader"},
+		Author:  Author{Name: "XXYXXReader v2"},
 		Links: []Link{
 			{Rel: "self", Href: r.URL.RequestURI(), Type: "application/atom+xml;profile=opds-catalog;kind=acquisition"},
 			{Rel: "start", Href: "/opds", Type: "application/atom+xml;profile=opds-catalog;kind=navigation"},

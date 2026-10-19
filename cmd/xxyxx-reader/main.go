@@ -55,7 +55,7 @@ func main() {
 
 	go func() {
 		log.Printf("=========================================================")
-		log.Printf("  XXYXXReader · 阅境 已启动")
+		log.Printf("  XXYXXReader v2 · 阅境 已启动")
 		log.Printf("  水墨书架: http://127.0.0.1:%d/", cfg.Port)
 		log.Printf("  OPDS目录: http://127.0.0.1:%d/opds", cfg.Port)
 		log.Printf("  书库目录: %s", cfg.LibraryDir)

@@ -383,34 +383,60 @@ export class FoliateView extends HTMLElement {
       }));
     });
 
-    // 2. 监听选词完成事件（触发四色印彩浮层）
+    // 2. 监听选词完成事件（触发四色印彩浮层，兼容移动端与桌面端）
     let selectionJustHappened = false;
-    const handleSelectionEnd = (e) => {
-      const sel = doc.getSelection();
-      if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
-      const range = sel.getRangeAt(0);
-      const cfiData = CFIEngine.fromRange(range, this.currentSectionIndex);
-      if (!cfiData) return;
+    let selectionDebounceTimer = null;
 
-      selectionJustHappened = true;
-      setTimeout(() => { selectionJustHappened = false; }, 280);
+    const handleSelectionEnd = () => {
+      clearTimeout(selectionDebounceTimer);
+      selectionDebounceTimer = setTimeout(() => {
+        try {
+          const sel = doc.getSelection();
+          if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+          const range = sel.getRangeAt(0);
+          const cfiData = CFIEngine.fromRange(range, this.currentSectionIndex);
+          if (!cfiData) return;
 
-      const rect = range.getBoundingClientRect();
-      const frameRect = this.iframe.getBoundingClientRect();
-      this.dispatchEvent(new CustomEvent('text-selected', {
-        detail: {
-          ...cfiData,
-          chapterIndex: this.currentSectionIndex,
-          chapterTitle: this.getCurrentChapterTitle(),
-          clientX: frameRect.left + rect.left + rect.width / 2,
-          clientY: frameRect.top + rect.bottom
+          selectionJustHappened = true;
+          setTimeout(() => { selectionJustHappened = false; }, 320);
+
+          const rect = range.getBoundingClientRect();
+          const frameRect = this.iframe.getBoundingClientRect();
+          const clientX = frameRect.left + (rect.width ? rect.left + rect.width / 2 : (rect.left || window.innerWidth / 2));
+          const clientY = frameRect.top + (rect.bottom || (rect.top + 24));
+
+          this.dispatchEvent(new CustomEvent('text-selected', {
+            detail: {
+              ...cfiData,
+              chapterIndex: this.currentSectionIndex,
+              chapterTitle: this.getCurrentChapterTitle(),
+              clientX,
+              clientY
+            }
+          }));
+        } catch (err) {
+          console.warn('[xxyxx-reader] selection error:', err);
         }
-      }));
+      }, 90);
     };
-    doc.addEventListener('mouseup', handleSelectionEnd);
-    doc.addEventListener('touchend', handleSelectionEnd);
 
-    // 3. 左右滑动手势支持
+    doc.addEventListener('mouseup', handleSelectionEnd);
+    doc.addEventListener('touchend', () => {
+      handleSelectionEnd();
+      setTimeout(handleSelectionEnd, 140);
+    });
+    doc.addEventListener('selectionchange', () => {
+      const sel = doc.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().trim()) {
+        clearTimeout(selectionDebounceTimer);
+        selectionDebounceTimer = setTimeout(handleSelectionEnd, 320);
+      }
+    });
+    doc.addEventListener('contextmenu', () => {
+      setTimeout(handleSelectionEnd, 120);
+    });
+
+    // 3. 左右滑动手势支持（选词状态下自动避让，防止误翻页）
     let touchStartX = null;
     let touchStartY = null;
     doc.addEventListener('touchstart', (e) => {
@@ -426,6 +452,11 @@ export class FoliateView extends HTMLElement {
       const dy = e.changedTouches[0].clientY - touchStartY;
       touchStartX = null;
       touchStartY = null;
+
+      // 如果当前正在选词或有选区，禁止滑动手势翻页
+      const sel = doc.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+
       if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5 && this.settings.flipMode !== 'continuous') {
         if (dx < 0) this.next();
         else this.prev();
@@ -435,8 +466,6 @@ export class FoliateView extends HTMLElement {
     // 4. 点击事件（已有高亮点击编辑，或二维九宫格触控热区判定）
     doc.addEventListener('click', (e) => {
       if (selectionJustHappened) return;
-      const sel = doc.getSelection();
-      if (sel && !sel.isCollapsed && sel.toString().trim()) return;
 
       const markEl = e.target.closest && e.target.closest('mark.xxyxx-highlight');
       if (markEl) {
@@ -462,7 +491,7 @@ export class FoliateView extends HTMLElement {
       const yRatio = e.clientY / viewH;
 
       this.dispatchEvent(new CustomEvent('viewport-tap', {
-        detail: { xRatio, yRatio }
+        detail: { xRatio, yRatio, originalEvent: e }
       }));
     });
 
@@ -564,6 +593,18 @@ export class FoliateView extends HTMLElement {
         chapterTitle
       }
     }));
+  }
+
+  clearSelection() {
+    try {
+      const doc = this.iframe?.contentDocument;
+      if (doc) {
+        const sel = doc.getSelection();
+        if (sel && sel.removeAllRanges) sel.removeAllRanges();
+      }
+      const winSel = window.getSelection();
+      if (winSel && winSel.removeAllRanges) winSel.removeAllRanges();
+    } catch (_) {}
   }
 }
 

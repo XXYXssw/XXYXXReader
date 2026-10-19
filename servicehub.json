@@ -1,33 +1,61 @@
 {
-  "name": "xxyxx-reader",
-  "title": "XXYXXReader · 阅境",
-  "category": "productivity",
-  "executable": "/Volumes/ROG/AIProjects/XXYXXReader/bin/xxyxx-reader",
-  "args": ["-config", "/Volumes/ROG/AIProjects/XXYXXReader/config.json"],
-  "cwd": "/Volumes/ROG/AIProjects/XXYXXReader",
-  "auto_start": true,
-  "keep_alive": true,
-  "port": 8980,
-  "health_check": {
-    "url": "http://127.0.0.1:8980/api/health",
-    "interval_seconds": 30,
-    "timeout_seconds": 3
+  "id": "xxyxx-reader-v2",
+  "name": "XXYXXReader v2",
+  "icon": "📖",
+  "description": "东方水墨宣纸美学 · 全设备与墨水屏低功耗阅读器 v2",
+  "type": "child",
+  "cmd": [
+    "/Volumes/ROG/AIProjects/XXYXXReader 2/bin/xxyxx-reader",
+    "-config",
+    "/Volumes/ROG/AIProjects/XXYXXReader 2/config.json"
+  ],
+  "workdir": "/Volumes/ROG/AIProjects/XXYXXReader 2",
+  "ports": [
+    8999
+  ],
+  "health": {
+    "kind": "http",
+    "url": "http://127.0.0.1:8999/health",
+    "timeoutSec": 2
   },
+  "openUrl": "http://127.0.0.1:8999",
+  "autoStart": false,
   "actions": [
     {
-      "label": "打开水墨书架",
-      "action": "open_url",
-      "url": "http://127.0.0.1:8980/"
+      "id": "open-bookshelf",
+      "label": "打开水墨书斋",
+      "type": "open-url",
+      "url": "http://127.0.0.1:8999"
     },
     {
+      "id": "rescan-library",
+      "label": "同步扫描书库",
+      "type": "run-command",
+      "cmd": [
+        "curl",
+        "-s",
+        "-X",
+        "POST",
+        "http://127.0.0.1:8999/api/library/scan"
+      ]
+    },
+    {
+      "id": "open-library-folder",
       "label": "打开书库文件夹",
-      "action": "open_folder",
-      "path": "/Volumes/ROG/AIProjects/XXYXXReader/library"
+      "type": "run-command",
+      "cmd": [
+        "open",
+        "/Volumes/ROG/AIProjects/XXYXXReader 2/library"
+      ]
     },
     {
-      "label": "打开 Obsidian 笔记",
-      "action": "open_folder",
-      "path": "/Volumes/ROG/AIProjects/XXYXXReader/notes"
+      "id": "open-notes-folder",
+      "label": "打开 Obsidian 笔记目录",
+      "type": "run-command",
+      "cmd": [
+        "open",
+        "/Volumes/ROG/AIProjects/XXYXXReader 2/notes"
+      ]
     }
   ]
 }
