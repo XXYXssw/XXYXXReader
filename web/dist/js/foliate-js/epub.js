@@ -1,5 +1,5 @@
 // Foliate-core EPUB 2 / EPUB 3 解析器与章节资源重写引擎
-import { ZipArchive } from './zip.js?v=2.0.1';
+import { ZipArchive } from './zip.js?v=2.0.2';
 
 function resolvePath(baseDir, relHref) {
   if (!relHref || /^(https?:|data:|blob:|mailto:|#)/i.test(relHref)) return relHref;

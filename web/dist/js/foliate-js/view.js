@@ -1,7 +1,7 @@
 // Foliate-core <foliate-view> 统一流式阅读 Web Component
 // 支持：Shadow DOM + iframe 样式穿透、三模翻页(0ms瞬切/水平滑动/连续滚动)、四色印彩高亮图层、二维九宫格热区转发
-import { EPUBBook } from './epub.js?v=2.0.1';
-import { MOBIBook } from './mobi.js?v=2.0.1';
+import { EPUBBook } from './epub.js?v=2.0.2';
+import { MOBIBook } from './mobi.js?v=2.0.2';
 import { CFIEngine } from './cfi.js';
 import { ThemeManager } from '../theme.js';
 
@@ -57,38 +57,18 @@ export class FoliateView extends HTMLElement {
       </div>
     `;
     this.iframe = this.shadowRoot.getElementById('chapter-frame');
+    this._lastTapTime = 0;
+  }
 
-    // 宿主元素手势后备（针对部分老旧 WebView iframe 丢事件的情况）
-    let hostStartX = null, hostStartY = null, hostStartTime = 0;
-    this.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1) {
-        hostStartX = e.touches[0].clientX;
-        hostStartY = e.touches[0].clientY;
-        hostStartTime = Date.now();
-      }
-    }, { passive: true });
-    this.addEventListener('touchend', (e) => {
-      if (hostStartX === null || e.changedTouches.length === 0) return;
-      const endX = e.changedTouches[0].clientX;
-      const endY = e.changedTouches[0].clientY;
-      const dx = endX - hostStartX;
-      const dy = endY - hostStartY;
-      const dt = Date.now() - hostStartTime;
-      hostStartX = null; hostStartY = null;
-
-      if (Math.abs(dx) > 38 && Math.abs(dx) > Math.abs(dy) * 1.3 && this.settings.flipMode !== 'continuous') {
-        if (dx < 0) this.next();
-        else this.prev();
-        return;
-      }
-      if (Math.abs(dx) < 18 && Math.abs(dy) < 18 && dt < 450) {
-        const viewW = this.clientWidth || window.innerWidth;
-        const viewH = this.clientHeight || window.innerHeight;
-        this.dispatchEvent(new CustomEvent('viewport-tap', {
-          detail: { xRatio: endX / viewW, yRatio: endY / viewH, originalEvent: e }
-        }));
-      }
-    }, { passive: true });
+  _emitTap(xRatio, yRatio, origEvent) {
+    const now = Date.now();
+    if (this._lastTapTime && (now - this._lastTapTime < 380)) {
+      return;
+    }
+    this._lastTapTime = now;
+    this.dispatchEvent(new CustomEvent('viewport-tap', {
+      detail: { xRatio, yRatio, originalEvent: origEvent }
+    }));
   }
 
   async openBuffer(arrayBuffer, fileType = 'epub') {
@@ -555,9 +535,7 @@ export class FoliateView extends HTMLElement {
         }
         const viewW = this.iframe.clientWidth || window.innerWidth;
         const viewH = this.iframe.clientHeight || window.innerHeight;
-        this.dispatchEvent(new CustomEvent('viewport-tap', {
-          detail: { xRatio: endX / viewW, yRatio: endY / viewH, originalEvent: e }
-        }));
+        this._emitTap(endX / viewW, endY / viewH, e);
       }
     }, { passive: true });
 
@@ -585,12 +563,7 @@ export class FoliateView extends HTMLElement {
 
       const viewW = this.iframe.clientWidth || window.innerWidth;
       const viewH = this.iframe.clientHeight || window.innerHeight;
-      const xRatio = e.clientX / viewW;
-      const yRatio = e.clientY / viewH;
-
-      this.dispatchEvent(new CustomEvent('viewport-tap', {
-        detail: { xRatio, yRatio, originalEvent: e }
-      }));
+      this._emitTap(e.clientX / viewW, e.clientY / viewH, e);
     });
 
     // 5. 连续滚动模式下更新进度
